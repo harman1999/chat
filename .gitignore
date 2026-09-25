@@ -30,8 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — never commit real values
 .env*
+# ...but the template must ship: the first setup step is `cp .env.example .env.local`,
+# and a fresh clone has nothing to copy without this.
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +42,32 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local object storage — uploaded files, not source
+/.storage
+
+# process output. The CI workflow writes server.log, and a stray log can carry
+# request details and tokens.
+*.log
+server.log
+
+# HAR captures record full requests including cookies and bearer tokens.
+*.har
+
+# editors and OS
+.idea/
+.vscode/
+*.swp
+*~
+Thumbs.db
+
+# scratch — screenshots and one-off captures taken while developing
+/screenshots/
+/tmp/
+
+# A stray 1920x1080 JPEG at the repo root, despite the name. Anchored to the
+# root so it cannot hide a legitimate `har` elsewhere in the tree.
+/har
+
+# process ids and logs written by scripts/helix.sh
+/.run/

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" role="img" aria-label="Latency dashboard preview">
+  <rect width="640" height="360" fill="#0f1726"/>
+  <rect x="24" y="24" width="180" height="10" rx="5" fill="#33415c"/>
+  <rect x="24" y="24" width="150" height="10" rx="5" fill="#33415c"/>
+  <rect x="24" y="52" width="92" height="7" rx="3.5" fill="#25304a"/>
+  <g fill="#131c2f" stroke="#243049">
+    <rect x="24" y="80" width="288" height="118" rx="8"/>
+    <rect x="328" y="80" width="288" height="118" rx="8"/>
+    <rect x="24" y="214" width="592" height="122" rx="8"/>
+  </g>
+  <polyline points="44,170 84,150 124,158 164,122 204,132 244,100 284,110" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="348,176 388,168 428,140 468,148 508,116 548,124 588,96" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#1d283f">
+    <rect x="44" y="300" width="26" height="20" rx="3"/><rect x="82" y="284" width="26" height="36" rx="3"/>
+    <rect x="120" y="268" width="26" height="52" rx="3"/><rect x="158" y="292" width="26" height="28" rx="3"/>
+    <rect x="196" y="256" width="26" height="64" rx="3"/><rect x="234" y="276" width="26" height="44" rx="3"/>
+    <rect x="272" y="248" width="26" height="72" rx="3"/><rect x="310" y="288" width="26" height="32" rx="3"/>
+    <rect x="348" y="264" width="26" height="56" rx="3"/><rect x="386" y="296" width="26" height="24" rx="3"/>
+    <rect x="424" y="272" width="26" height="48" rx="3"/><rect x="462" y="252" width="26" height="68" rx="3"/>
+  </g>
+  <rect x="44" y="234" width="120" height="8" rx="4" fill="#2a3752"/>
+  <rect x="44" y="234" width="104" height="8" rx="4" fill="#2a3752"/>
+</svg>

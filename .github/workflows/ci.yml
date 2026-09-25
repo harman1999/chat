@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The integration suite drives the real API against real Postgres and
+    # Redis, so CI runs the same dependencies rather than stubbing them. Ports
+    # are the defaults here; only local development offsets them to avoid
+    # colliding with other stacks on a developer's machine.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: helix
+          POSTGRES_PASSWORD: helix
+          POSTGRES_DB: helix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U helix -d helix"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://helix:helix@localhost:5432/helix
+      REDIS_URL: redis://localhost:6379
+      STORAGE_DIR: ./.storage
+      # src/services/http.ts treats anything but the literal "false" as mock
+      # mode. Without this the app under test would serve fixtures and the
+      # integration suite would pass without touching the API.
+      NEXT_PUBLIC_USE_MOCK: "false"
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+      NEXT_PUBLIC_WS_URL: ws://localhost:3101
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Before the build: a production build writes .next/types, which a later
+      # typecheck then reads as though they were source.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      - name: Seed the workspace
+        run: npm run db:seed
+
+      - name: Build
+        run: npm run build
+
+      - name: Start the app
+        run: |
+          npm start > server.log 2>&1 &
+          # Any HTTP status means the app is up; /auth/me answers 401 when
+          # signed out, which is a healthy response, not a failure.
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/v1/auth/me || true)
+            if [ -n "$code" ] && [ "$code" != "000" ]; then
+              echo "Server is answering (HTTP $code)."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server did not start within 60s:"
+          cat server.log
+          exit 1
+
+      - name: Test
+        run: npm test
+
+      - name: Server log
+        # The integration suite talks to the app over HTTP, so when it fails the
+        # explanation is usually in the app's log rather than the test output.
+        if: failure()
+        run: cat server.log
