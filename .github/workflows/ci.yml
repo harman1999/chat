@@ -56,6 +56,21 @@ jobs:
       NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
       NEXT_PUBLIC_WS_URL: ws://localhost:3101
 
+      # `npm start` is `next start`, which sets NODE_ENV=production — so the two
+      # production defaults both apply here, and CI has no .env.local to fall
+      # back on. Both of the following are needed because of that, and both are
+      # test values for a throwaway runner.
+
+      # Required in production, with no fallback. Without it every route that
+      # touches an outgoing OAuth credential answers 500.
+      ENCRYPTION_SECRET: ci-only-encryption-secret-not-a-real-one
+
+      # The SSRF guard blocks private addresses in production. The integration
+      # suite stands up HTTP receivers on 127.0.0.1 to assert that webhooks and
+      # slash commands actually deliver, so it has to be allowed to reach them.
+      # This is exactly the escape hatch a self-hosted install uses.
+      OUTBOUND_ALLOW_PRIVATE: "true"
+
     steps:
       - uses: actions/checkout@v4
 

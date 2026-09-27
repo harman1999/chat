@@ -1,7 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { encryptSecret } from "@server/lib/secrets";
 import { ACCOUNTS, assertServerRunning, closeDb, db, signIn, type Client } from "./helpers";
 
 /**
@@ -71,6 +70,14 @@ describe("using an outgoing OAuth connection", () => {
   /**
    * Creates a connection already holding an *expired* token, the way one looks
    * an hour after it was authorised.
+   *
+   * The tokens are obtained through the real authorize/callback flow rather
+   * than written directly. Encrypting them here would use *this process's*
+   * ENCRYPTION_SECRET, which is only the server's by coincidence — the moment
+   * the two differ (as they do in CI) the server cannot decrypt what the test
+   * wrote, and the failure looks like a bug in the refresh logic. Going through
+   * the endpoint means the server encrypts with its own key, and exercises the
+   * exchange path as a bonus.
    */
   const connectWithExpiredToken = async () => {
     const name = `conn-test-${unique()}`;
@@ -89,13 +96,23 @@ describe("using an outgoing OAuth connection", () => {
       })
       .then((r) => r.json())) as { id: string };
 
+    // The server issues the state; the callback will only accept its own.
+    const { authorizeUrl } = (await admin
+      .fetch(`/admin/integrations/oauth-connections/${created.id}/authorize`)
+      .then((r) => r.json())) as { authorizeUrl: string };
+    const state = new URL(authorizeUrl).searchParams.get("state");
+
+    const callback = await admin.fetch(
+      `/admin/integrations/oauth-connections/${created.id}/callback?code=test-code&state=${state}`,
+    );
+    expect(callback.status).toBe(200);
+
+    // Age the token without touching the ciphertext the server just wrote.
     await db().query(
       `UPDATE outgoing_oauth_connections
-          SET access_token_enc = $2, refresh_token_enc = $3,
-              token_expires_at = now() - interval '5 minutes',
-              status = 'connected'
+          SET token_expires_at = now() - interval '5 minutes'
         WHERE id = $1`,
-      [created.id, encryptSecret("stale-token"), encryptSecret("the-refresh-token")],
+      [created.id],
     );
     return { id: created.id, name };
   };
@@ -126,7 +143,9 @@ describe("using an outgoing OAuth connection", () => {
 
     const last = delivered[delivered.length - 1];
     expect(provided.lastGrant).toBe("refresh_token");
-    expect(provided.lastRefreshToken).toBe("the-refresh-token");
+    // Whatever the provider issued at authorization time, not a value this
+    // test invented.
+    expect(provided.lastRefreshToken).toMatch(/^rotated-refresh-/);
     expect(last.authorization).toBe(`Bearer fresh-token-${provided.issued}`);
     expect(last.authorization).not.toContain("stale-token");
   });
@@ -140,7 +159,7 @@ describe("using an outgoing OAuth connection", () => {
     expect(rows[0].status).toBe("connected");
     // Encrypted, and no longer the value we seeded.
     expect(rows[0].refresh_token_enc).toMatch(/^v1\./);
-    expect(rows[0].refresh_token_enc).not.toContain("the-refresh-token");
+    expect(rows[0].refresh_token_enc).not.toContain("rotated-refresh");
   });
 
   it("records an error and sends unauthenticated when the provider refuses", async () => {
