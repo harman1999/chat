@@ -71,3 +71,9 @@ Thumbs.db
 
 # process ids and logs written by scripts/helix.sh
 /.run/
+
+
+/docs/control-decisions.md  
+/docs/HANDOVER.md  
+/docs/integrations.md
+

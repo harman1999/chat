@@ -277,3 +277,6 @@ export const incomingWebhookPayloadSchema = z.object({
   /** Overrides the bot's name for this message only. */
   username: z.string().trim().max(80).optional(),
 });
+
+/** Opening a direct message needs only the other person. */
+export const openDirectMessageSchema = z.object({ userId: id });

@@ -100,6 +100,68 @@ export const channelsRepo = {
     return rows.map((row) => mapChannel(row, workspaceId));
   },
 
+  /**
+   * Opens the direct message between two people, creating it only if it does
+   * not exist.
+   *
+   * Idempotent by necessity: two people clicking each other at the same moment
+   * must land in one conversation, not two halves of a split history. The
+   * lookup matches on *exactly* these two members rather than "contains both",
+   * so a group DM that happens to include them is never mistaken for their
+   * private one.
+   */
+  async openDirect(
+    workspaceId: string,
+    userId: string,
+    otherUserId: string,
+  ): Promise<Channel | null> {
+    if (userId === otherUserId) return null;
+
+    const existing = await queryOne<{ id: string }>(
+      `SELECT c.id
+         FROM channels c
+         JOIN channel_members m ON m.channel_id = c.id
+        WHERE c.workspace_id = $1 AND c.kind = 'dm'
+        GROUP BY c.id
+       HAVING count(*) = 2
+          AND bool_or(m.user_id = $2)
+          AND bool_or(m.user_id = $3)
+        LIMIT 1`,
+      [workspaceId, userId, otherUserId],
+    );
+    if (existing) return channelsRepo.get(existing.id, userId, workspaceId);
+
+    const id = `ch_${randomUUID()}`;
+    await transaction(async (client) => {
+      await client.query(
+        `INSERT INTO channels (id, workspace_id, kind, name, purpose, description, member_count, created_by)
+         VALUES ($1,$2,'dm','','','',0,$3)`,
+        [id, workspaceId, userId],
+      );
+      // member_count follows from the trigger in migration 0003.
+      await client.query(
+        // Matches the directory the picker is built from (`usersRepo.list`),
+        // which excludes only deactivated accounts. Requiring 'active' here
+        // meant the dialog offered people — anyone still `invited` — that it
+        // then refused with "not available in this workspace".
+        `INSERT INTO channel_members (channel_id, user_id, last_read_at)
+         SELECT $1, u.id, now() FROM users u
+          WHERE u.id = ANY($2::text[]) AND u.workspace_id = $3
+            AND u.account_status <> 'deactivated'`,
+        [id, [userId, otherUserId], workspaceId],
+      );
+    });
+
+    // A deactivated or absent counterpart inserts one member, not two — which
+    // would be a conversation with nobody in it.
+    const created = await channelsRepo.get(id, userId, workspaceId);
+    if (created && created.memberCount < 2) {
+      await query(`DELETE FROM channels WHERE id = $1`, [id]);
+      return null;
+    }
+    return created;
+  },
+
   async get(channelId: string, userId: string, workspaceId: string): Promise<Channel | null> {
     const row = await queryOne<ChannelRow>(`${CHANNEL_SELECT} WHERE c.id = $1 AND c.workspace_id = $3`, [
       channelId,

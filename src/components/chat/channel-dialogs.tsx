@@ -4,6 +4,7 @@ import { useActiveConversation } from "@/hooks";
 import { useUIStore } from "@/store";
 import { AddPeopleDialog } from "./add-people-dialog";
 import { CreateChannelDialog } from "./create-channel-dialog";
+import { NewDirectMessageDialog } from "./new-dm-dialog";
 
 /**
  * Mounted once by the shell. Both dialogs are reachable from several places —
@@ -12,6 +13,8 @@ import { CreateChannelDialog } from "./create-channel-dialog";
  */
 export function ChannelDialogs() {
   const isCreateOpen = useUIStore((state) => state.isCreateChannelOpen);
+  const isNewDmOpen = useUIStore((state) => state.isNewDirectMessageOpen);
+  const setNewDmOpen = useUIStore((state) => state.setNewDirectMessageOpen);
   const setCreateOpen = useUIStore((state) => state.setCreateChannelOpen);
   const isAddPeopleOpen = useUIStore((state) => state.isAddPeopleOpen);
   const setAddPeopleOpen = useUIStore((state) => state.setAddPeopleOpen);
@@ -22,6 +25,7 @@ export function ChannelDialogs() {
   return (
     <>
       <CreateChannelDialog open={isCreateOpen} onOpenChange={setCreateOpen} />
+      <NewDirectMessageDialog open={isNewDmOpen} onOpenChange={setNewDmOpen} />
       {conversation && isChannel && (
         <AddPeopleDialog
           conversation={conversation}

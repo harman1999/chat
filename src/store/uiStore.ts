@@ -18,6 +18,7 @@ interface UIState {
   isShortcutsOpen: boolean;
   /** Both dialogs are opened from several places, so the flag lives here. */
   isCreateChannelOpen: boolean;
+  isNewDirectMessageOpen: boolean;
   isAddPeopleOpen: boolean;
   activeThreadRootId: string | null;
   /** Message to scroll to and flash after a jump. Cleared once shown. */
@@ -34,6 +35,7 @@ interface UIState {
   setSearchOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
   setCreateChannelOpen: (open: boolean) => void;
+  setNewDirectMessageOpen: (open: boolean) => void;
   setAddPeopleOpen: (open: boolean) => void;
   openThread: (rootId: string) => void;
   closeThread: () => void;
@@ -51,6 +53,7 @@ export const useUIStore = create<UIState>()(
       isSearchOpen: false,
       isShortcutsOpen: false,
       isCreateChannelOpen: false,
+      isNewDirectMessageOpen: false,
       isAddPeopleOpen: false,
       activeThreadRootId: null,
       highlightedMessageId: null,
@@ -69,6 +72,7 @@ export const useUIStore = create<UIState>()(
       setSearchOpen: (isSearchOpen) => set({ isSearchOpen }),
       setShortcutsOpen: (isShortcutsOpen) => set({ isShortcutsOpen }),
       setCreateChannelOpen: (isCreateChannelOpen) => set({ isCreateChannelOpen }),
+      setNewDirectMessageOpen: (isNewDirectMessageOpen) => set({ isNewDirectMessageOpen }),
       setAddPeopleOpen: (isAddPeopleOpen) => set({ isAddPeopleOpen }),
       openThread: (rootId) =>
         set({

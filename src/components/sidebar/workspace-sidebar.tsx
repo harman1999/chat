@@ -37,6 +37,7 @@ export function WorkspaceSidebar({
   const toggleGroup = useWorkspaceStore((state) => state.toggleGroup);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
   const openCreateChannel = useUIStore((state) => state.setCreateChannelOpen);
+  const openNewDirectMessage = useUIStore((state) => state.setNewDirectMessageOpen);
 
   const workspacesQuery = useQuery({
     queryKey: ["workspaces"],
@@ -152,6 +153,7 @@ export function WorkspaceSidebar({
           isCollapsed={isCollapsed}
           isOpen={!collapsedGroups.dms}
           onToggle={() => toggleGroup("dms")}
+          onAdd={() => openNewDirectMessage(true)}
           addLabel="Start a direct message"
         >
           {dmQuery.isPending ? (
@@ -165,7 +167,16 @@ export function WorkspaceSidebar({
                   isCollapsed={isCollapsed}
                 />
               ))}
-
+              {!isCollapsed && (
+                <button
+                  type="button"
+                  onClick={() => openNewDirectMessage(true)}
+                  className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-subtle transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg focus-sidebar"
+                >
+                  <Plus className="size-4 shrink-0" aria-hidden />
+                  <span className="truncate">New message</span>
+                </button>
+              )}
             </>
           )}
         </SidebarGroup>

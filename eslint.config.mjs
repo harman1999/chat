@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated bundles from `npm run build:server`. Linting build output
+    // reports on other people's code.
+    "dist/**",
   ]),
 ]);
 
