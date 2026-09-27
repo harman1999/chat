@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { query } from "../db/client";
+import { log } from "./log";
 import { increment } from "./metrics";
 import type { AuditCategory, AuditSeverity } from "../../src/types";
 
@@ -50,7 +51,7 @@ export async function audit(entry: AuditEntry): Promise<void> {
     // unless it is counted, so it is treated as a failure rather than a no-op.
     if (written.length === 0) {
       increment("audit.failed", entry.action);
-      console.error("[audit] no such actor", entry.actorId, entry.action);
+      log.error("audit write skipped: no such actor", { actorId: entry.actorId, action: entry.action });
       return;
     }
     increment("audit.written", entry.action);
@@ -59,6 +60,6 @@ export async function audit(entry: AuditEntry): Promise<void> {
     // leaves the trail with holes nobody can see. The counter makes the gap
     // visible even though the log line has scrolled away.
     increment("audit.failed", entry.action);
-    console.error("[audit] failed to record", entry.action, error);
+    log.error("audit write failed", { action: entry.action, error });
   }
 }

@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { log, reportError } from "./log";
 import type { ZodType } from "zod";
 import { consume, DEFAULT_RULE, type RateLimitRule } from "./rate-limit";
 import { ForbiddenError, UnauthorizedError } from "./session";
@@ -64,8 +66,22 @@ export function handler<A extends unknown[]>(
           { status: 400 },
         );
       }
-      console.error("[api]", error);
-      return problem(500, "internal_error", "Something went wrong");
+      // An unexpected failure. The id goes to the client *and* the log, so a
+      // user reporting "it broke" gives an operator something to grep for.
+      const errorId = randomUUID();
+      const request = args[0] instanceof Request ? args[0] : undefined;
+
+      log.error("unhandled error in route handler", {
+        errorId,
+        method: request?.method,
+        path: request ? new URL(request.url).pathname : undefined,
+        error,
+      });
+      reportError(error, { errorId, path: request ? new URL(request.url).pathname : undefined });
+
+      // The message stays generic — the id is the only detail that crosses the
+      // boundary, because anything else leaks internals.
+      return problem(500, "internal_error", `Something went wrong (reference ${errorId})`);
     }
   };
 }

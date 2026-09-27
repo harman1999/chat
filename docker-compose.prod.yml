@@ -1,0 +1,101 @@
+# Production-shaped stack: built images, no bind mounts, no dev server.
+#
+#   ENCRYPTION_SECRET=$(openssl rand -base64 32) \
+#   POSTGRES_PASSWORD=... \
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# `migrate` runs to completion before web and ws start, so a deploy cannot serve
+# traffic against a schema it has not applied.
+
+name: helix-prod
+
+x-app: &app
+  build:
+    context: .
+    args:
+      # Inlined at build time, so they are arguments rather than environment.
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-/api/v1}
+      NEXT_PUBLIC_WS_URL: ${PUBLIC_WS_URL:?set PUBLIC_WS_URL, e.g. wss://helix.example.com}
+  environment: &app-env
+    NODE_ENV: production
+    DATABASE_URL: postgresql://helix:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/helix
+    REDIS_URL: redis://redis:6379
+    ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:?set ENCRYPTION_SECRET to a value of at least 24 characters}
+    PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL, e.g. https://helix.example.com}
+    STORAGE_DIR: /app/.storage
+    # Unset means blocked in production. Only set this if the integrations are
+    # genuinely on the private network.
+    OUTBOUND_ALLOW_PRIVATE: ${OUTBOUND_ALLOW_PRIVATE:-}
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: helix
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: helix
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helix -d helix"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # Runs once and exits. web and ws wait for it to succeed.
+  migrate:
+    <<: *app
+    command: ["node", "dist/db/migrate.mjs"]
+    restart: "no"
+
+  web:
+    <<: *app
+    command: ["node", "server.js"]
+    environment:
+      <<: *app-env
+      PORT: 3000
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      # Single-node only. Behind more than one instance this must be object
+      # storage — see server/lib/storage.ts.
+      - storage:/app/.storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  ws:
+    <<: *app
+    command: ["node", "dist/ws/server.mjs"]
+    environment:
+      <<: *app-env
+      WS_PORT: 3101
+    ports:
+      - "${WS_PORT:-3101}:3101"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  redisdata:
+  storage:

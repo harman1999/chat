@@ -1,6 +1,7 @@
 import { getConnectionToken } from "./oauth-client";
 import { deliver } from "./outbound";
 import { increment } from "./metrics";
+import { log } from "./log";
 import { integrationsRepo } from "../repo/integrations";
 import type { Message, User } from "../../src/types";
 
@@ -60,7 +61,7 @@ export function dispatchOutgoing(input: {
     } catch (error) {
       // Nothing above should throw, but this runs detached: an unhandled
       // rejection here would take the process down rather than lose a webhook.
-      console.error("[dispatch] outgoing webhook fan-out failed", error);
+      log.error("outgoing webhook fan-out failed", { error });
     }
   })();
 }

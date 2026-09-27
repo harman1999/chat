@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:server": "node scripts/build-server.mjs",
     "start": "next start",
     "lint": "eslint",
     "dev:ws": "tsx watch server/ws/server.ts",

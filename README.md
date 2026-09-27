@@ -378,6 +378,71 @@ authenticated by something other than a session.
 
 ---
 
+## Deploying
+
+```bash
+export POSTGRES_PASSWORD=...            # required
+export ENCRYPTION_SECRET=$(openssl rand -base64 32)
+export PUBLIC_URL=https://helix.example.com
+export PUBLIC_WS_URL=wss://helix.example.com
+
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+`migrate` runs to completion before `web` and `ws` start, so a deploy cannot
+serve traffic against a schema it has not applied. Every required variable is
+declared with `:?` and a message naming what to set, so a missing one fails at
+`compose config` rather than at runtime.
+
+**Configuration fails fast in production.** `required()` does not apply its
+development fallback when `NODE_ENV=production` — a missing `DATABASE_URL` used
+to mean silently pointing at localhost, and a missing `ENCRYPTION_SECRET` meant
+encrypting real credentials with a value committed to this repository.
+`ENCRYPTION_SECRET` is additionally rejected if it is short or still the
+development default.
+
+Configuration is read on first *access*, not at import. `next build` imports
+every route module with none of the runtime environment present, so validating
+at module load turned a correct production guard into a failed build — and the
+database pool and Redis client, both constructed at module scope, opened
+connections during it. All three are lazy now.
+
+**The SSRF guard defaults by environment**, not by a flag someone has to
+remember: permissive in development (local integrations run on localhost),
+blocked in production. `OUTBOUND_ALLOW_PRIVATE` still overrides explicitly. The
+previous safe-by-default flag had to be switched on in every developer's env
+file, which is exactly how it reached a deployment.
+
+**The seed refuses to run in production.** It creates 58 accounts sharing one
+published password, including an owner. `ALLOW_PRODUCTION_SEED=yes-really`
+overrides it for a demo deployment.
+
+### The image
+
+One image, three entrypoints — web, gateway and migration runner differ only in
+their command. `output: "standalone"` means the runtime carries only the
+dependencies actually reached (226MB, no `node_modules`), and it runs as `node`,
+not root.
+
+The gateway and the migration runner are bundled to plain JavaScript by
+`npm run build:server`, so production needs no TypeScript loader. They are
+bundled rather than left external because standalone traces only what the *web*
+app imports: nothing imported `ws`, so a runtime import of it found nothing.
+
+### Health checks
+
+| Endpoint | For |
+|---|---|
+| `GET /api/v1/health` | Liveness. Touches nothing else — a liveness probe that depends on the database restarts healthy processes during a blip. |
+| `GET /api/v1/health?ready=1` | Readiness. Checks Postgres and Redis, answers 503 when either is down. |
+
+### Still single-node
+
+`server/lib/storage.ts` writes uploads to local disk. Behind more than one
+instance, a file uploaded to one is a 404 on the other. The interface is four
+methods and swapping in S3 means implementing them against the SDK; that
+adapter does not exist yet, so run one instance or mount shared storage.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs lint → typecheck → migrate → seed → build →
@@ -399,10 +464,19 @@ unreachable, so an outage cannot take the API down with it, and an audit write
 that throws is swallowed, so it cannot roll back the action it describes. Both
 are the right call and both leave no trace.
 
+Logs are one JSON object per line in production (`server/lib/log.ts`), readable
+text in development. Every unhandled error at the API boundary gets an id that
+goes to both the log and the client, so "it broke" becomes something to grep
+for. `reportError()` is the single place an error tracker is wired in.
+
 `server/lib/metrics.ts` counts them. `GET /api/v1/admin/metrics` exposes the
 counters plus a live Redis check and the last audit timestamp, and the admin
 dashboard renders a **System health** panel that states outright whether rate
 limiting is in effect.
+
+`GET /api/v1/admin/metrics/prometheus` renders the same counters in exposition
+format for a scraper. Still authenticated — rejection patterns are not something
+to publish — so scrapers use a bot token.
 
 The counters are in-process by design: the first thing they must report is that
 Redis is unreachable, which a counter stored in Redis could not do. They reset

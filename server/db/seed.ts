@@ -27,6 +27,21 @@ import { hashPassword } from "../lib/password";
 import type { Message } from "../../src/types";
 
 const WORKSPACE_ID = "ws_northwind";
+/**
+ * The seed creates 58 accounts that all share one published password, including
+ * an owner. That is exactly right for a demo workspace and a catastrophe
+ * against real data, so it refuses to run in production unless someone says so
+ * in as many words.
+ */
+if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "yes-really") {
+  console.error(
+    "\n  Refusing to seed: NODE_ENV=production.\n" +
+      "  This creates demo accounts with a published password.\n" +
+      "  Set ALLOW_PRODUCTION_SEED=yes-really if that is genuinely what you want.\n",
+  );
+  process.exit(1);
+}
+
 const DEMO_PASSWORD = "helix-demo-password";
 
 async function main() {

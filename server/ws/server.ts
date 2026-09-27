@@ -9,6 +9,7 @@
 import { createServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { env } from "../env";
+import { log } from "../lib/log";
 import { query, queryOne } from "../db/client";
 import { createSubscriber, presenceKey, redis, REALTIME_CHANNEL, sessionKey } from "../lib/redis";
 
@@ -209,7 +210,7 @@ async function main() {
   }, 30_000);
 
   httpServer.listen(env.wsPort, () => {
-    console.log(`[ws] listening on :${env.wsPort}`);
+    log.info("gateway listening", { port: env.wsPort });
   });
 
   const shutdown = async () => {
@@ -224,6 +225,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("[ws] failed to start", error);
+  log.error("gateway failed to start", { error });
   process.exit(1);
 });

@@ -12,6 +12,8 @@
  * durable and complete, lives in Postgres instead.
  */
 
+import { log } from "./log";
+
 export type MetricName =
   | "ratelimit.allowed"
   | "ratelimit.rejected"
@@ -84,5 +86,5 @@ export function logThrottled(key: string, intervalMs: number, message: () => str
   const previous = lastLoggedAt.get(key) ?? 0;
   if (now - previous < intervalMs) return;
   lastLoggedAt.set(key, now);
-  console.warn(message());
+  log.warn(message());
 }

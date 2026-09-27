@@ -91,6 +91,11 @@ const PUBLIC = new Set([
    * shape because OAuth clients expect that.
    */
   "POST /oauth/token",
+  /**
+   * A liveness/readiness probe has no session by definition. It reports only
+   * whether dependencies answer, never anything about their contents.
+   */
+  "GET /health",
 ]);
 
 describe("route surface", () => {

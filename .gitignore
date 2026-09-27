@@ -71,3 +71,6 @@ Thumbs.db
 
 # process ids and logs written by scripts/helix.sh
 /.run/
+
+# bundled server entrypoints, produced by npm run build:server
+/dist/
