@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Check, Loader2, ShieldCheck } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useActiveWorkspace } from "@/hooks";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { request } from "@/services/http";
@@ -36,6 +37,7 @@ export function OAuthConsent() {
   const router = useRouter();
   const params = useSearchParams();
   const [isDeciding, setIsDeciding] = useState(false);
+  const workspace = useActiveWorkspace();
   const [failure, setFailure] = useState<string | null>(null);
 
   // Carried through untouched: `state` belongs to the application and is echoed
@@ -113,7 +115,7 @@ export function OAuthConsent() {
               </h1>
               <p className="mt-1 text-sm text-fg-muted">
                 It is asking to act as <strong className="font-medium text-fg">{data.user.displayName}</strong>{" "}
-                in Northwind Technologies.
+                in {workspace?.name ?? "this workspace"}.
               </p>
             </header>
 

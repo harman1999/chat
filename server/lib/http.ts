@@ -58,6 +58,9 @@ export function handler<A extends unknown[]>(
       if (error instanceof ForbiddenError) {
         return problem(403, "forbidden", error.message);
       }
+      if (error instanceof NotFoundError) {
+        return problem(404, "not_found", error.message);
+      }
       if (error instanceof ValidationError) {
         return NextResponse.json(
           { code: "invalid_request", message: error.message, status: 400, issues: error.issues },
@@ -68,6 +71,18 @@ export function handler<A extends unknown[]>(
       return problem(500, "internal_error", "Something went wrong");
     }
   };
+}
+
+/**
+ * Turned into a 404 by `handler`. Used where the honest answer is 403 but
+ * saying so would confirm that something exists — a message in a channel the
+ * caller cannot see, or anything in another workspace.
+ */
+export class NotFoundError extends Error {
+  constructor(message = "Not found") {
+    super(message);
+    this.name = "NotFoundError";
+  }
 }
 
 /**

@@ -1,12 +1,19 @@
 import { queryOne } from "../db/client";
 import { ForbiddenError, getSession } from "./session";
 
-/** True when the user's role grants the permission. */
+/**
+ * True when the user's role grants the permission.
+ *
+ * The role must belong to the user's own workspace. Role ids are global and
+ * `users.role_id` has no foreign key, so without that join a role id from
+ * another workspace would carry that workspace's powers into this one.
+ */
 export async function hasPermission(userId: string, permissionId: string): Promise<boolean> {
   const row = await queryOne<{ ok: boolean }>(
     `SELECT true AS ok
      FROM users u
-     JOIN role_permissions rp ON rp.role_id = u.role_id AND rp.permission_id = $2
+     JOIN roles r ON r.id = u.role_id AND r.workspace_id = u.workspace_id
+     JOIN role_permissions rp ON rp.role_id = r.id AND rp.permission_id = $2
      WHERE u.id = $1`,
     [userId, permissionId],
   );

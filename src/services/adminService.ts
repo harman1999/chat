@@ -288,6 +288,17 @@ export const adminService = {
     return request<void>("/admin/settings", { method: "PATCH", body: patch });
   },
 
+  /** Replaces the workspace logo with this image. Resolves to its new URL. */
+  async uploadLogo(file: File): Promise<{ logoUrl: string }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ logoUrl: URL.createObjectURL(file) }, 300);
+    return request<{ logoUrl: string }>("/admin/workspace/logo", { method: "PUT", body: file });
+  },
+
+  async removeLogo(): Promise<void> {
+    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 200);
+    return request<void>("/admin/workspace/logo", { method: "DELETE" });
+  },
+
   async auditLog(): Promise<AuditLogEntry[]> {
     if (USE_MOCK_TRANSPORT) return mockResolve(auditLog, 320);
     return request<AuditLogEntry[]>("/admin/audit-log");

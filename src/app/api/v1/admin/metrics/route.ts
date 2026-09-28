@@ -26,7 +26,20 @@ export const GET = handler(async () => {
     ),
   ]);
 
-  const metrics = snapshot();
+  const raw = snapshot();
+  // Webhook counters are labelled "<workspace>/<hook>". Keep this workspace's
+  // and drop the prefix; other workspaces' hook names are not this admin's.
+  const own = `${workspaceId}/`;
+  const metrics = {
+    ...raw,
+    counters: raw.counters.flatMap((counter) =>
+      !counter.name.startsWith("webhook.")
+        ? [counter]
+        : counter.label.startsWith(own)
+          ? [{ ...counter, label: counter.label.slice(own.length) }]
+          : [],
+    ),
+  };
   const degraded = metrics.counters
     .filter((counter) => counter.name === "ratelimit.degraded")
     .reduce((total, counter) => total + counter.count, 0);

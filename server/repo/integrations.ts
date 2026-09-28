@@ -88,7 +88,9 @@ export const integrationsRepo = {
         `INSERT INTO users (
            id, workspace_id, username, display_name, full_name, email, title,
            avatar_color, role, role_id, account_status, is_bot, presence)
-         VALUES ($1,$2,$3,$4,$4,$5,$6,$7,'member','role_member','active',true,'online')`,
+         VALUES ($1,$2,$3,$4,$4,$5,$6,$7,'member',
+                 (SELECT id FROM roles WHERE workspace_id = $2 AND kind = 'member'),
+                 'active',true,'online')`,
         [
           botId,
           input.workspaceId,
@@ -122,14 +124,50 @@ export const integrationsRepo = {
     return { bot: bot as BotAccount, token: secret.plaintext };
   },
 
-  async listTokens(botId: string): Promise<IntegrationToken[]> {
+  /**
+   * Which of a channel id and a connection id, if given, is not this
+   * workspace's. Checked on create: both are stored as given, and a foreign id
+   * would otherwise show another workspace's channel or connection name here.
+   */
+  async foreignReference(
+    workspaceId: string,
+    refs: { channelId?: string | null; connectionId?: string | null },
+  ): Promise<"channel" | "connection" | null> {
+    if (refs.channelId) {
+      const channel = await queryOne<{ ok: boolean }>(
+        `SELECT true AS ok FROM channels WHERE id = $1 AND workspace_id = $2 AND kind IN ('public', 'private')`,
+        [refs.channelId, workspaceId],
+      );
+      if (!channel) return "channel";
+    }
+    if (refs.connectionId) {
+      const connection = await queryOne<{ ok: boolean }>(
+        `SELECT true AS ok FROM outgoing_oauth_connections WHERE id = $1 AND workspace_id = $2`,
+        [refs.connectionId, workspaceId],
+      );
+      if (!connection) return "connection";
+    }
+    return null;
+  },
+
+  /** True when `botId` is a bot of this workspace — the only accounts tokens are for. */
+  async isBotOf(botId: string, workspaceId: string): Promise<boolean> {
+    const row = await queryOne<{ ok: boolean }>(
+      `SELECT true AS ok FROM users WHERE id = $1 AND workspace_id = $2 AND is_bot`,
+      [botId, workspaceId],
+    );
+    return Boolean(row);
+  },
+
+  async listTokens(botId: string, workspaceId: string): Promise<IntegrationToken[]> {
     const rows = await query<{
       id: string; name: string; token_prefix: string; created_at: Date;
       last_used_at: Date | null; revoked_at: Date | null;
     }>(
       `SELECT id, name, token_prefix, created_at, last_used_at, revoked_at
-       FROM integration_tokens WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
-      [botId],
+       FROM integration_tokens WHERE user_id = $1 AND workspace_id = $2
+       ORDER BY created_at DESC LIMIT 100`,
+      [botId, workspaceId],
     );
     return rows.map((row) => ({
       id: row.id,

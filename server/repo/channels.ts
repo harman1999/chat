@@ -258,7 +258,14 @@ export const channelsRepo = {
     return Boolean(row);
   },
 
-  /** Returns the ids actually added, skipping people already in the channel. */
+  /**
+   * Returns the ids actually added, skipping people already in the channel.
+   *
+   * Only people from the channel's own workspace, and only into a real
+   * channel: membership is what every read check trusts, so adding someone
+   * from elsewhere would hand them this channel. A DM's members are fixed when
+   * it is opened, so it is never added to here.
+   */
   async addMembers(channelId: string, userIds: string[]): Promise<string[]> {
     if (userIds.length === 0) return [];
 
@@ -267,6 +274,9 @@ export const channelsRepo = {
         `INSERT INTO channel_members (channel_id, user_id, last_read_at)
          SELECT $1, u.id, now() FROM users u
          WHERE u.id = ANY($2::text[]) AND u.account_status = 'active'
+           AND u.workspace_id = (
+             SELECT c.workspace_id FROM channels c
+              WHERE c.id = $1 AND c.kind IN ('public', 'private'))
          ON CONFLICT (channel_id, user_id) DO NOTHING
          RETURNING user_id`,
         [channelId, userIds],

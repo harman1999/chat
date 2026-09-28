@@ -61,8 +61,10 @@ export const adminRepo = {
        FROM generate_series(
               (now() - make_interval(days => $2::int - 1))::date, now()::date, interval '1 day'
             ) AS d(day)
-       LEFT JOIN messages m ON m.created_at >= d.day AND m.created_at < d.day + interval '1 day'
-       LEFT JOIN channels c ON c.id = m.channel_id AND c.workspace_id = $1
+       -- The workspace filter must sit inside the messages join: as its own
+       -- LEFT JOIN it kept every workspace's messages and only nulled the channel.
+       LEFT JOIN (messages m JOIN channels c ON c.id = m.channel_id AND c.workspace_id = $1)
+              ON m.created_at >= d.day AND m.created_at < d.day + interval '1 day'
        GROUP BY d.day ORDER BY d.day`,
       [workspaceId, days],
     );
@@ -83,11 +85,13 @@ export const adminRepo = {
         two_factor_enabled: boolean;
         created_at: Date;
         message_count: string;
+        member_role_id: string | null;
       }
     >(
       `SELECT ${USER_COLUMNS}, u.account_status, u.role_id, u.last_sign_in_at,
               u.two_factor_enabled, u.created_at,
-              (SELECT count(*) FROM messages m WHERE m.author_id = u.id) AS message_count
+              (SELECT count(*) FROM messages m WHERE m.author_id = u.id) AS message_count,
+              (SELECT r.id FROM roles r WHERE r.workspace_id = u.workspace_id AND r.kind = 'member') AS member_role_id
        FROM users u WHERE u.workspace_id = $1 ORDER BY u.display_name
        LIMIT $2`,
       [workspaceId, limit],
@@ -96,7 +100,8 @@ export const adminRepo = {
     return rows.map((row) => ({
       ...mapUser(row),
       status: row.account_status,
-      roleId: row.role_id ?? "role_member",
+      // No role recorded means the default one — this workspace's Member.
+      roleId: row.role_id ?? row.member_role_id ?? "",
       lastSignInAt: row.last_sign_in_at?.toISOString() ?? null,
       twoFactorEnabled: row.two_factor_enabled,
       createdAt: row.created_at.toISOString(),
@@ -104,21 +109,38 @@ export const adminRepo = {
     }));
   },
 
-  async setUserRole(userId: string, roleId: string): Promise<void> {
-    await query(`UPDATE users SET role_id = $2 WHERE id = $1`, [userId, roleId]);
+  /**
+   * Assigns a role within one workspace. Both the person and the role must be
+   * in it; returns false otherwise, so a caller cannot reach across. The legacy
+   * `role` column follows the role's kind, and custom roles count as member.
+   */
+  async setUserRole(workspaceId: string, userId: string, roleId: string): Promise<boolean> {
+    const rows = await query<{ id: string }>(
+      `UPDATE users u SET role_id = r.id, role = COALESCE(r.kind, 'member')
+         FROM roles r
+        WHERE u.id = $2 AND u.workspace_id = $1 AND r.id = $3 AND r.workspace_id = $1
+       RETURNING u.id`,
+      [workspaceId, userId, roleId],
+    );
+    return rows.length > 0;
   },
 
-  async setUserStatus(userId: string, status: AdminUser["status"]): Promise<void> {
-    await query(`UPDATE users SET account_status = $2 WHERE id = $1`, [userId, status]);
+  /** Within one workspace only; false when the person is not in it. */
+  async setUserStatus(workspaceId: string, userId: string, status: AdminUser["status"]): Promise<boolean> {
+    const rows = await query<{ id: string }>(
+      `UPDATE users SET account_status = $3 WHERE id = $2 AND workspace_id = $1 RETURNING id`,
+      [workspaceId, userId, status],
+    );
+    return rows.length > 0;
   },
 
   async listRoles(workspaceId: string): Promise<Role[]> {
     const rows = await query<{
       id: string; name: string; description: string; is_system: boolean;
-      member_count: string; permission_ids: string[] | null;
+      kind: Role["kind"]; member_count: string; permission_ids: string[] | null;
     }>(
-      `SELECT r.id, r.name, r.description, r.is_system,
-              (SELECT count(*) FROM users u WHERE u.role_id = r.id) AS member_count,
+      `SELECT r.id, r.name, r.description, r.is_system, r.kind,
+              (SELECT count(*) FROM users u WHERE u.role_id = r.id AND u.workspace_id = r.workspace_id) AS member_count,
               (SELECT array_agg(rp.permission_id) FROM role_permissions rp WHERE rp.role_id = r.id) AS permission_ids
        FROM roles r WHERE r.workspace_id = $1 ORDER BY r.is_system DESC, r.name
        LIMIT 200`,
@@ -130,6 +152,7 @@ export const adminRepo = {
       name: row.name,
       description: row.description,
       isSystem: row.is_system,
+      kind: row.kind,
       memberCount: Number(row.member_count),
       permissionIds: row.permission_ids ?? [],
     }));
@@ -222,8 +245,8 @@ export const adminRepo = {
     if (role.is_system) return { ok: false, reason: "system_role" };
     if (input.fallbackRoleId === input.roleId) return { ok: false, reason: "bad_fallback" };
 
-    const fallback = await queryOne<{ id: string }>(
-      `SELECT id FROM roles WHERE id = $1 AND workspace_id = $2`,
+    const fallback = await queryOne<{ id: string; kind: string | null }>(
+      `SELECT id, kind FROM roles WHERE id = $1 AND workspace_id = $2`,
       [input.fallbackRoleId, input.workspaceId],
     );
     if (!fallback) return { ok: false, reason: "bad_fallback" };
@@ -238,7 +261,7 @@ export const adminRepo = {
           input.roleId,
           input.fallbackRoleId,
           // `role` is the legacy display column; keep it in step.
-          input.fallbackRoleId.replace(/^role_/, ""),
+          fallback.kind ?? "member",
           input.workspaceId,
         ],
       );

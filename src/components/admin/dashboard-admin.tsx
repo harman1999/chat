@@ -8,7 +8,7 @@ import { UserAvatar } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUserMap } from "@/hooks";
+import { useActiveWorkspace, useUserMap } from "@/hooks";
 import { adminService } from "@/services";
 import { formatBytes, formatCompact, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,7 @@ export function DashboardAdmin() {
   const [range, setRange] = useState<(typeof RANGES)[number]["value"]>(30);
 
   const usersById = useUserMap();
+  const workspace = useActiveWorkspace();
   const statsQuery = useQuery({ queryKey: ["admin-stats"], queryFn: () => adminService.stats() });
   const activityQuery = useQuery({
     queryKey: ["admin-activity"],
@@ -67,7 +68,7 @@ export function DashboardAdmin() {
   return (
     <AdminPage
       title="Dashboard"
-      description="Health and activity across Northwind Technologies."
+      description={`Health and activity across ${workspace?.name ?? "this workspace"}.`}
       actions={
         <Button variant="secondary" size="sm" asChild>
           <Link href="/admin/audit-log">View audit log</Link>

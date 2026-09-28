@@ -17,6 +17,8 @@ interface Client {
   userId: string;
   /** Channels the user belongs to, cached for the life of the connection. */
   channelIds: Set<string>;
+  /** Their workspace, for events addressed to a whole workspace (presence). */
+  workspaceId: string;
   isAlive: boolean;
 }
 
@@ -56,11 +58,26 @@ async function channelsFor(userId: string): Promise<Set<string>> {
   return new Set(rows.map((row) => row.channel_id));
 }
 
-/** An event reaches a client if it is addressed to them, or to a channel they are in. */
-function shouldDeliver(client: Client, audience: { userIds?: string[]; channelId?: string }): boolean {
-  if (!audience.userIds && !audience.channelId) return true;
+async function workspaceOf(userId: string): Promise<string> {
+  const row = await queryOne<{ workspace_id: string }>(
+    `SELECT workspace_id FROM users WHERE id = $1`,
+    [userId],
+  );
+  return row?.workspace_id ?? "";
+}
+
+/**
+ * An event reaches a client if it is addressed to them, to a channel they are
+ * in, or to their workspace. Nothing is broadcast to every connection: an
+ * unaddressed event reaches nobody, since "everyone" would span workspaces.
+ */
+function shouldDeliver(
+  client: Client,
+  audience: { userIds?: string[]; channelId?: string; workspaceId?: string },
+): boolean {
   if (audience.userIds?.includes(client.userId)) return true;
   if (audience.channelId && client.channelIds.has(audience.channelId)) return true;
+  if (audience.workspaceId && audience.workspaceId === client.workspaceId) return true;
   return false;
 }
 
@@ -90,6 +107,7 @@ async function main() {
       socket,
       userId,
       channelIds: await channelsFor(userId),
+      workspaceId: await workspaceOf(userId),
       isAlive: true,
     };
     clients.add(client);
@@ -103,7 +121,7 @@ async function main() {
         seq: await redis.incr("helix:seq"),
         emittedAt: new Date().toISOString(),
         payload: { userId, status: "online" },
-        audience: {},
+        audience: { workspaceId: client.workspaceId },
       }),
     );
 
@@ -151,7 +169,7 @@ async function main() {
           seq: await redis.incr("helix:seq"),
           emittedAt: new Date().toISOString(),
           payload: { userId, status: "offline" },
-          audience: {},
+          audience: { workspaceId: client.workspaceId },
         }),
       );
     });
@@ -163,7 +181,7 @@ async function main() {
   subscriber.on("message", (_channel, raw) => {
     let envelope: {
       event?: string;
-      audience?: { userIds?: string[]; channelId?: string };
+      audience?: { userIds?: string[]; channelId?: string; workspaceId?: string };
       origin?: string;
     };
     try {

@@ -11,7 +11,12 @@ import type { RealtimeEnvelope, RealtimeEventName } from "../../src/types";
 export async function publish<T>(
   event: RealtimeEventName,
   payload: T,
-  audience: { userIds?: string[]; channelId?: string } = {},
+  /**
+   * Who receives it: named people, a channel's members, or everyone in one
+   * workspace. There is no "everyone everywhere" — an empty audience reaches
+   * nobody, so forgetting to address an event cannot leak it across tenants.
+   */
+  audience: { userIds?: string[]; channelId?: string; workspaceId?: string },
 ): Promise<void> {
   const envelope: RealtimeEnvelope<T> & { audience: typeof audience } = {
     event,

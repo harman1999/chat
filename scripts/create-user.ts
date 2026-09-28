@@ -9,10 +9,10 @@
  *   npm run create-user -- \
  *     --email ada@northwind.io --name "Ada Lovelace" --password "s3cret!"
  *
- * Optional: --username --role --title --department --timezone --channels
+ * Optional: --workspace <id> (default ws_northwind) --username --role --title
+ *           --department --timezone --channels
  */
 import { config } from "dotenv";
-import { env } from "../server/env";
 import { usersRepo } from "../server/repo/users";
 
 config({ path: ".env.local", quiet: true });
@@ -40,7 +40,7 @@ async function main() {
 
   const result = await usersRepo.create({
     // No session here either, so the same single-tenant default applies.
-    workspaceId: env.defaultWorkspaceId,
+    workspaceId: arg("workspace") ?? "ws_northwind",
     email,
     fullName,
     password,

@@ -34,6 +34,7 @@ import { Hint } from "@/components/ui/tooltip";
 import { useUserMap } from "@/hooks";
 import { channelService } from "@/services";
 import { cn } from "@/lib/utils";
+import { formatMembers } from "@/lib/format";
 import { useUIStore, useWorkspaceStore } from "@/store";
 import type { Channel } from "@/types";
 
@@ -134,7 +135,7 @@ export function ChannelHeader({ conversation }: { conversation: Channel }) {
             <button
               type="button"
               onClick={() => openRightPanel("members")}
-              aria-label={`${conversation.memberCount} members`}
+              aria-label={formatMembers(conversation.memberCount)}
               className="hidden h-7 items-center gap-1.5 rounded-md border border-border px-1.5 transition-colors hover:border-border-strong hover:bg-surface-hover sm:flex"
             >
               <span className="flex -space-x-1.5">

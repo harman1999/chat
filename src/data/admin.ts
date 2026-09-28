@@ -37,6 +37,7 @@ export const permissions: Permission[] = [
   { id: "p_admin_settings", group: "Administration", label: "Manage workspace settings", description: "Change org-wide configuration." },
   { id: "p_admin_auth", group: "Administration", label: "Manage authentication", description: "Configure SSO, SCIM and password policy." },
   { id: "p_admin_audit", group: "Administration", label: "View audit logs", description: "Read the workspace audit trail." },
+  { id: "p_workspace_create", group: "Administration", label: "Create workspaces", description: "Start a new, separate workspace and become its owner." },
   { id: "p_admin_billing", group: "Administration", label: "Manage billing", description: "Change the plan and payment details." },
 ];
 
@@ -49,6 +50,7 @@ const MEMBER_PERMS = [
 export const roles: Role[] = [
   {
     id: "role_owner",
+    kind: "owner",
     name: "Owner",
     description: "Full control, including billing and workspace deletion.",
     isSystem: true,
@@ -57,6 +59,7 @@ export const roles: Role[] = [
   },
   {
     id: "role_admin",
+    kind: "admin",
     name: "Administrator",
     description: "Manages people, channels and configuration. No billing access.",
     isSystem: true,
@@ -65,6 +68,7 @@ export const roles: Role[] = [
   },
   {
     id: "role_moderator",
+    kind: null,
     name: "Moderator",
     description: "Keeps channels tidy — can remove messages and archive channels.",
     isSystem: false,
@@ -73,6 +77,7 @@ export const roles: Role[] = [
   },
   {
     id: "role_member",
+    kind: "member",
     name: "Member",
     description: "The default role for everyone in the workspace.",
     isSystem: true,
@@ -81,6 +86,7 @@ export const roles: Role[] = [
   },
   {
     id: "role_guest",
+    kind: "guest",
     name: "Guest",
     description: "Limited to the channels they are invited to.",
     isSystem: true,

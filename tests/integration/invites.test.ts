@@ -67,7 +67,9 @@ describe("invite links", () => {
     const response = await preview(tokenOf(body.url));
     expect(response.status).toBe(200);
     const shown = (await response.json()) as { workspaceName: string; invitedByName: string };
-    expect(shown.workspaceName).toBe("Northwind Technologies");
+    // Read, not hardcoded: the workspace can be renamed from the app.
+    const current = await db().query<{ name: string }>(`SELECT name FROM workspaces WHERE id = 'ws_northwind'`);
+    expect(shown.workspaceName).toBe(current.rows[0].name);
     expect(shown.invitedByName).toBeTruthy();
   });
 

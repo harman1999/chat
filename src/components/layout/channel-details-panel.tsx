@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { channelService } from "@/services";
 import { PRESENCE_LABEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { formatMembers } from "@/lib/format";
 import { MessagePreview } from "@/components/messages/message-preview";
 import { useMessageStore, useUIStore, useWorkspaceStore } from "@/store";
 import { useConversation } from "@/hooks";
@@ -103,7 +104,7 @@ export function ChannelDetailsPanel({ onClose }: { onClose?: () => void }) {
             <span className="truncate">{conversation.name}</span>
           </span>
         }
-        subtitle={`${conversation.memberCount.toLocaleString()} members`}
+        subtitle={formatMembers(conversation.memberCount)}
         onClose={onClose}
       />
 
@@ -215,7 +216,7 @@ export function ChannelDetailsPanel({ onClose }: { onClose?: () => void }) {
                 <li className="pt-1.5">
                   <Button variant="ghost" size="sm" className="w-full justify-start px-1.5">
                     <Users />
-                    View all {conversation.memberCount.toLocaleString()} members
+                    View all {formatMembers(conversation.memberCount)}
                   </Button>
                 </li>
               )}

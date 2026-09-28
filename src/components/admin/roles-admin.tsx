@@ -13,6 +13,7 @@ import { isApiError } from "@/services/http";
 import type { Role } from "@/types";
 import { AdminPage } from "./admin-page";
 import { CreateRoleDialog } from "./create-role-dialog";
+import { formatMembers } from "@/lib/format";
 
 export function RolesAdmin() {
   const queryClient = useQueryClient();
@@ -120,7 +121,7 @@ export function RolesAdmin() {
                     <div className="mt-3 flex flex-wrap items-center gap-4">
                       <span className="flex items-center gap-1.5 text-2xs text-fg-muted">
                         <Users className="size-3.5 text-fg-subtle" aria-hidden />
-                        {role.memberCount.toLocaleString()} members
+                        {formatMembers(role.memberCount)}
                       </span>
                       <span className="flex min-w-40 items-center gap-2 text-2xs text-fg-muted">
                         {granted} of {totalPermissions} permissions

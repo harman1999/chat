@@ -54,7 +54,9 @@ export function dispatchOutgoing(input: {
           }, auth?.accessToken);
 
           await integrationsRepo.recordDelivery(hook.id, result);
-          increment(result.ok ? "webhook.delivered" : "webhook.failed", hook.name);
+          // Prefixed with the workspace: counters are process-wide, and the
+          // metrics page shows each workspace only its own hooks.
+          increment(result.ok ? "webhook.delivered" : "webhook.failed", `${input.workspaceId}/${hook.name}`);
         }),
       );
     } catch (error) {

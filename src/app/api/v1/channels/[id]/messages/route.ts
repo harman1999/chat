@@ -36,6 +36,12 @@ export const POST = handler(async (request: Request, ctx: { params: Promise<{ id
     return problem(400, "invalid_request", "A message needs text or an attachment");
   }
 
+  // A reply must answer a message in this same channel — otherwise it would
+  // attach to a thread somewhere the author cannot see.
+  if (body.threadRootId && (await messagesRepo.channelOf(body.threadRootId)) !== id) {
+    return problem(422, "invalid_thread", "That thread is not in this channel");
+  }
+
   const message = await messagesRepo.create({
     channelId: id,
     authorId: user.id,

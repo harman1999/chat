@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronsUpDown, LogOut, Settings2, ShieldCheck, UserPlus } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut, Plus, Settings2, ShieldCheck, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -12,15 +12,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { AppLogoMark } from "@/components/common";
+import { AppLogoMark, WorkspaceLogo } from "@/components/common";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePermission } from "@/hooks";
 import { authService } from "@/services";
 import { APP } from "@/lib/constants";
+import { reloadAs } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { formatMembers } from "@/lib/format";
 import { useWorkspaceStore } from "@/store";
 import type { Workspace } from "@/types";
 import { InvitePeopleDialog } from "./invite-people-dialog";
+import { CreateWorkspaceDialog, SwitchWorkspaceDialog } from "./workspace-access-dialogs";
 
 const PLAN_LABEL: Record<Workspace["plan"], string> = {
   free: "Free",
@@ -45,8 +48,14 @@ export function WorkspaceSwitcher({
   const onTopbar = variant === "topbar";
   const router = useRouter();
   const workspaceId = useWorkspaceStore((state) => state.workspaceId);
-  const setWorkspace = useWorkspaceStore((state) => state.setWorkspace);
-  const active = workspaces.find((workspace) => workspace.id === workspaceId) ?? workspaces[0];
+  // The session's workspace. Others listed are separate accounts.
+  const active =
+    workspaces.find((workspace) => workspace.isCurrent) ??
+    workspaces.find((workspace) => workspace.id === workspaceId) ??
+    workspaces[0];
+  const canCreate = usePermission("p_workspace_create");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [switchTarget, setSwitchTarget] = useState<Workspace | null>(null);
   // Only offered to people who can actually invite, rather than shown to
   // everyone and refused on click.
   const canInvite = usePermission("p_user_invite");
@@ -86,7 +95,11 @@ export function WorkspaceSwitcher({
           isCollapsed ? "h-9 justify-center px-0" : onTopbar ? "h-9 gap-2 px-1.5" : "h-11 gap-2.5 px-2",
         )}
       >
-        <AppLogoMark className={cn(isCollapsed && "size-7")} />
+        <WorkspaceLogo
+          logoUrl={active.logoUrl}
+          name={active.name}
+          fallback={<AppLogoMark className={cn(isCollapsed && "size-7")} />}
+        />
         {!isCollapsed && (
           <>
             <span className="min-w-0 flex-1">
@@ -122,22 +135,30 @@ export function WorkspaceSwitcher({
           return (
             <DropdownMenuItem
               key={workspace.id}
-              onSelect={() => setWorkspace(workspace.id)}
+              onSelect={() => {
+                if (!isActive) setSwitchTarget(workspace);
+              }}
               className="gap-2.5 py-2"
             >
-              <span
-                className={cn(
-                  "grid size-7 shrink-0 place-items-center rounded-md text-2xs font-bold",
-                  isActive ? "bg-accent text-accent-fg" : "bg-surface-active text-fg-muted",
-                )}
-                aria-hidden
-              >
-                {workspace.initials}
-              </span>
+              <WorkspaceLogo
+                logoUrl={workspace.logoUrl}
+                name={workspace.name}
+                fallback={
+                  <span
+                    className={cn(
+                      "grid size-7 shrink-0 place-items-center rounded-md text-2xs font-bold",
+                      isActive ? "bg-accent text-accent-fg" : "bg-surface-active text-fg-muted",
+                    )}
+                    aria-hidden
+                  >
+                    {workspace.initials}
+                  </span>
+                }
+              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{workspace.name}</span>
                 <span className="block truncate text-2xs text-fg-subtle">
-                  {workspace.memberCount.toLocaleString()} members · {PLAN_LABEL[workspace.plan]}
+                  {formatMembers(workspace.memberCount)} · {PLAN_LABEL[workspace.plan]}
                 </span>
               </span>
               {workspace.mentionCount > 0 && !isActive && (
@@ -149,6 +170,13 @@ export function WorkspaceSwitcher({
             </DropdownMenuItem>
           );
         })}
+
+        {canCreate && (
+          <DropdownMenuItem onSelect={() => setIsCreateOpen(true)}>
+            <Plus />
+            Create a workspace
+          </DropdownMenuItem>
+        )}
 
         {canInvite && (
           <>
@@ -174,9 +202,7 @@ export function WorkspaceSwitcher({
           variant="danger"
           onSelect={async () => {
             await authService.signOut();
-            // Full navigation so server components re-read the cleared cookie.
-            router.push("/login");
-            router.refresh();
+            reloadAs("/login");
           }}
         >
           <LogOut />
@@ -189,6 +215,8 @@ export function WorkspaceSwitcher({
         onOpenChange={setIsInviteOpen}
         workspaceName={active.name}
       />
+      <CreateWorkspaceDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
+      <SwitchWorkspaceDialog target={switchTarget} onClose={() => setSwitchTarget(null)} />
     </>
   );
 }

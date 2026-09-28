@@ -1,3 +1,4 @@
+export { useActiveWorkspace } from "./useActiveWorkspace";
 export { useActiveConversation, useConversation } from "./useConversation";
 export { useCurrentUser } from "./useCurrentUser";
 export {

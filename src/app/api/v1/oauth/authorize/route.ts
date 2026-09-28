@@ -16,14 +16,18 @@ const CODE_TTL_SECONDS = 60;
  * behalf.
  */
 export const GET = handler(async (request: Request) => {
-  const { user } = await requireUserSession();
+  const { user, workspaceId } = await requireUserSession();
   const params = new URL(request.url).searchParams;
 
   const clientId = params.get("client_id") ?? "";
   const redirectUri = params.get("redirect_uri") ?? "";
 
   const app = await integrationsRepo.findAppByClientId(clientId);
-  if (!app || !app.is_enabled) return problem(404, "unknown_client", "Unknown application");
+  // An application acts only inside the workspace that registered it — the
+  // only one whose administrators can see and disable it.
+  if (!app || !app.is_enabled || app.workspace_id !== workspaceId) {
+    return problem(404, "unknown_client", "Unknown application");
+  }
 
   // Exact match. A prefix or wildcard match here is how an authorization code
   // gets delivered to an attacker-controlled path on a legitimate host.
@@ -53,7 +57,7 @@ export const GET = handler(async (request: Request) => {
  * browser extension — can redeem it, because the code alone is the proof.
  */
 export const POST = handler(async (request: Request) => {
-  const { user } = await requireUserSession();
+  const { user, workspaceId } = await requireUserSession();
   const params = new URL(request.url).searchParams;
 
   const clientId = params.get("client_id") ?? "";
@@ -62,7 +66,11 @@ export const POST = handler(async (request: Request) => {
   const method = params.get("code_challenge_method") ?? "";
 
   const app = await integrationsRepo.findAppByClientId(clientId);
-  if (!app || !app.is_enabled) return problem(404, "unknown_client", "Unknown application");
+  // An application acts only inside the workspace that registered it — the
+  // only one whose administrators can see and disable it.
+  if (!app || !app.is_enabled || app.workspace_id !== workspaceId) {
+    return problem(404, "unknown_client", "Unknown application");
+  }
   if (!app.redirect_uris.includes(redirectUri)) {
     return problem(400, "invalid_redirect_uri", "That redirect URI is not registered");
   }

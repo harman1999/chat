@@ -61,6 +61,11 @@ export function formatRelative(iso: string, locale = "en-US"): string {
   return rtf.format(direction * seconds, "second");
 }
 
+/** "1 member", "52 members". */
+export function formatMembers(count: number): string {
+  return `${count.toLocaleString()} ${count === 1 ? "member" : "members"}`;
+}
+
 export function formatCount(value: number, max = 99): string {
   return value > max ? `${max}+` : String(value);
 }

@@ -31,13 +31,15 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, headers, ...rest } = options;
+  // A file goes up as its own bytes, typed as itself; anything else is JSON.
+  const isFile = typeof Blob !== "undefined" && body instanceof Blob;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": isFile ? body.type || "application/octet-stream" : "application/json",
       ...headers,
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : isFile ? body : JSON.stringify(body),
     credentials: "include",
   });
 
@@ -51,6 +53,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       code: body?.code ?? `http_${response.status}`,
       message: body?.message ?? response.statusText ?? "Request failed",
       status: response.status,
+      details: body ?? undefined,
     };
     throw error;
   }

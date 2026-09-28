@@ -113,6 +113,10 @@ export interface Workspace {
   slug: string;
   /** Short mark shown in the workspace switcher. */
   initials: string;
+  /** Uploaded logo, or null to show the default mark. */
+  logoUrl: string | null;
+  /** The one signed in to. Others are separate accounts, reached by switching. */
+  isCurrent: boolean;
   plan: "free" | "business" | "enterprise";
   memberCount: number;
   unreadCount: number;
@@ -308,6 +312,8 @@ export interface ApiError {
   code: string;
   message: string;
   status: number;
+  /** The whole error body, for the few errors that carry more — the sign-in chooser. */
+  details?: Record<string, unknown>;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -332,12 +338,16 @@ export interface Permission {
   description: string;
 }
 
+/** The built-in roles every workspace has. Custom roles have no kind. */
+export type RoleKind = "owner" | "admin" | "member" | "guest";
+
 export interface Role {
   id: ID;
   name: string;
   description: string;
   /** System roles cannot be renamed or deleted. */
   isSystem: boolean;
+  kind: RoleKind | null;
   memberCount: number;
   permissionIds: ID[];
 }

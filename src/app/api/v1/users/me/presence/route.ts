@@ -6,7 +6,7 @@ import { requireSession } from "@server/lib/session";
 import { usersRepo } from "@server/repo/users";
 
 export const PUT = handler(async (request: Request) => {
-  const { user } = await requireSession();
+  const { user, workspaceId } = await requireSession();
   // Validated against the enum before anything is written: previously an
   // arbitrary string reached both Postgres and Redis, and only the column's
   // CHECK constraint stopped it — as an opaque 500, after the Redis write.
@@ -16,9 +16,11 @@ export const PUT = handler(async (request: Request) => {
   // Presence expires on its own, so a process that dies never strands a user
   // as permanently "online".
   await redis.set(presenceKey(user.id), status, "EX", 120);
-  await publish(status === "offline" ? "user.offline" : "user.online", {
-    userId: user.id,
-    status,
-  });
+  await publish(
+    status === "offline" ? "user.offline" : "user.online",
+    { userId: user.id, status },
+    // Only colleagues: presence says who exists and when they are around.
+    { workspaceId },
+  );
   return noContent();
 });

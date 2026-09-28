@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { query, queryOne } from "../db/client";
 import { generateSecret, hashSecret } from "../lib/secrets";
+import { roleIdFor } from "./roles";
 import { usernameFrom, usersRepo, type CreateUserResult } from "./users";
 import type { InviteLink, InvitePreview } from "../../src/types";
 
-/** A link always grants the least-privileged role; see migration 0006. */
-const INVITED_ROLE = "role_member";
 /** Where a new member lands, so their first screen is not an empty sidebar. */
 const DEFAULT_CHANNELS = ["general"];
 
@@ -153,6 +152,16 @@ export const invitesRepo = {
     // choose another. Tried in order, since creating also re-checks for a clash
     // and so stays correct if two people with the same name join at once.
     const base = usernameFrom(input.fullName) || "member";
+    // A link always grants the least-privileged role; see migration 0006.
+    const roleId = await roleIdFor(claimed.workspace_id, "member");
+    // Only those that exist here: a workspace without a #general must still be
+    // joinable, rather than every invite failing on a missing channel.
+    const channels = (
+      await query<{ name: string }>(
+        `SELECT name FROM channels WHERE workspace_id = $1 AND kind = 'public' AND name = ANY($2::text[])`,
+        [claimed.workspace_id, DEFAULT_CHANNELS],
+      )
+    ).map((row) => row.name);
     let created: CreateUserResult | undefined;
     for (let attempt = 1; attempt <= 25; attempt += 1) {
       created = await usersRepo.create({
@@ -161,8 +170,8 @@ export const invitesRepo = {
         fullName: input.fullName,
         password: input.password,
         username: attempt === 1 ? base : `${base}${attempt}`,
-        roleId: INVITED_ROLE,
-        channels: DEFAULT_CHANNELS,
+        roleId,
+        channels,
       });
       if (created.ok || created.reason !== "username_taken") break;
     }

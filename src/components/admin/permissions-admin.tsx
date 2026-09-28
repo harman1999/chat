@@ -264,7 +264,7 @@ export function PermissionsAdmin() {
                       {roles.map((role) => {
                         const baseline = role.permissionIds.includes(permission.id);
                         const granted = isGranted(role.id, permission.id, baseline);
-                        const locked = role.id === "role_owner";
+                        const locked = role.kind === "owner";
                         const isUnsaved = keyOf(role.id, permission.id) in pending;
 
                         return (

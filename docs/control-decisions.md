@@ -115,3 +115,22 @@ emailed, and the invitee sets their own password. It is not an email invitation
 with the email removed — it is the model Slack and Discord use by design.
 "Resend invitation" still does not exist, because there is still nothing to
 resend.
+
+## Addendum — multiple workspaces
+
+The deployment was single-tenant by decision: sign-in resolved against one
+fixed workspace. The owner asked for more than one, and chose the rules:
+
+- **Only owners and administrators create workspaces.** This is the
+  `p_workspace_create` permission (migration 0008), which the Owner and
+  Administrator roles hold.
+- **Accounts are separate per workspace, not one login shared across them.**
+  Creating a workspace gives the creator a new account there, starting with
+  the same email and password. From then on the two are independent.
+  Switching asks for the other account's password and ends the current
+  session. A sign-in whose password matches several accounts asks which
+  workspace to enter.
+
+Making a second workspace reachable turned up twenty cross-workspace gaps,
+all fixed and each tested. They had never mattered, because nobody had ever
+been outside Northwind.

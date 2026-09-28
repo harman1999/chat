@@ -3,9 +3,7 @@ import { audit } from "@server/lib/audit";
 import { requirePermission } from "@server/lib/permissions";
 import { requireSession } from "@server/lib/session";
 import { adminRepo } from "@server/repo/admin";
-
-/** Where members of a deleted role land: the least-privileged built-in role. */
-const FALLBACK_ROLE = "role_member";
+import { roleIdFor } from "@server/repo/roles";
 
 /**
  * Deletes a custom role.
@@ -20,11 +18,13 @@ export const DELETE = handler(
     const { user, workspaceId } = await requireSession();
     await requirePermission(user.id, "p_user_manage_roles");
     const { roleId } = await ctx.params;
+    // Members of a deleted role land on the least-privileged built-in role.
+    const fallbackRoleId = await roleIdFor(workspaceId, "member");
 
     const result = await adminRepo.deleteRole({
       workspaceId,
       roleId,
-      fallbackRoleId: FALLBACK_ROLE,
+      fallbackRoleId,
     });
 
     if (!result.ok) {
@@ -52,6 +52,6 @@ export const DELETE = handler(
       request,
     });
 
-    return json({ movedMembers: result.movedMembers, movedTo: FALLBACK_ROLE });
+    return json({ movedMembers: result.movedMembers, movedTo: fallbackRoleId });
   },
 );

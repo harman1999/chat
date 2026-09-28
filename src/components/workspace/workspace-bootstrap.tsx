@@ -37,12 +37,12 @@ export function WorkspaceBootstrap() {
   });
 
   useEffect(() => {
-    const first = workspaces?.[0];
-    if (!first) return;
-    // Adopt the first workspace when there is none, or when the persisted one
-    // is no longer a workspace this account belongs to.
-    if (!workspaces.some((workspace) => workspace.id === workspaceId)) {
-      useWorkspaceStore.getState().setWorkspace(first.id);
+    // Always the workspace the session is in. The list also names others
+    // this email has accounts in, but those are reached by switching, which
+    // signs in to them — never by pointing the store at them.
+    const current = workspaces?.find((workspace) => workspace.isCurrent) ?? workspaces?.[0];
+    if (current && current.id !== workspaceId) {
+      useWorkspaceStore.getState().setWorkspace(current.id);
     }
   }, [workspaceId, workspaces]);
 

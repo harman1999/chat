@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { query, queryOne, transaction } from "../db/client";
 import { hashPassword } from "../lib/password";
 import { defaultPreferences } from "../../src/config";
+import { roleIdFor } from "./roles";
 import type { PresenceStatus, User, UserPreferences, UserSession } from "../../src/types";
 
 export const USER_COLUMNS = `
@@ -125,12 +126,12 @@ export const usersRepo = {
   async create(input: CreateUserInput): Promise<CreateUserResult> {
     const username = input.username?.trim() || usernameFrom(input.fullName);
     const email = input.email.trim().toLowerCase();
-    const roleId = input.roleId ?? "role_member";
+    const roleId = input.roleId ?? (await roleIdFor(input.workspaceId, "member"));
 
     // users.role_id carries no foreign key, so an unknown id would be written
     // silently and only surface later as a broken permission check.
-    const role = await queryOne<{ id: string }>(
-      `SELECT id FROM roles WHERE id = $1 AND workspace_id = $2`,
+    const role = await queryOne<{ id: string; kind: string | null }>(
+      `SELECT id, kind FROM roles WHERE id = $1 AND workspace_id = $2`,
       [roleId, input.workspaceId],
     );
     if (!role) return { ok: false, reason: "unknown_role", roleId };
@@ -177,8 +178,9 @@ export const usersRepo = {
           input.department ?? "",
           input.timezone || "UTC",
           avatarColor(id),
-          // `role` is the legacy display column; `role_id` is what permissions read.
-          roleId.replace(/^role_/, ""),
+          // `role` is the legacy display column; `role_id` is what permissions
+          // read. It follows the role's kind; a custom role counts as member.
+          role.kind ?? "member",
           roleId,
         ],
       );
@@ -203,9 +205,33 @@ export const usersRepo = {
     return { ok: true, user: user as User, channels };
   },
 
-  async get(id: string): Promise<User | null> {
-    const row = await queryOne<UserRow>(`SELECT ${USER_COLUMNS} FROM users u WHERE u.id = $1`, [id]);
+  /** With a workspace, only someone in it — for anything a caller can name by id. */
+  async get(id: string, workspaceId?: string): Promise<User | null> {
+    const row = await queryOne<UserRow>(
+      `SELECT ${USER_COLUMNS} FROM users u WHERE u.id = $1 AND ($2::text IS NULL OR u.workspace_id = $2)`,
+      [id, workspaceId ?? null],
+    );
     return row ? mapUser(row) : null;
+  },
+
+  /**
+   * Every sign-in-capable account with this email, one per workspace at most,
+   * optionally only the one in the workspace with this slug.
+   */
+  async accountsForSignIn(email: string, workspaceSlug?: string) {
+    return query<UserRow & {
+      password_hash: string | null; account_status: string;
+      workspace_id: string; workspace_slug: string; workspace_name: string;
+    }>(
+      `SELECT ${USER_COLUMNS}, u.password_hash, u.account_status,
+              w.id AS workspace_id, w.slug AS workspace_slug, w.name AS workspace_name
+         FROM users u JOIN workspaces w ON w.id = u.workspace_id
+        WHERE lower(u.email) = lower($1) AND NOT u.is_bot
+          AND ($2::text IS NULL OR w.slug = $2)
+        ORDER BY w.name
+        LIMIT 50`,
+      [email, workspaceSlug ?? null],
+    );
   },
 
   async findByEmail(workspaceId: string, email: string) {

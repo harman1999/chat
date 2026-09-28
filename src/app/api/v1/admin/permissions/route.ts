@@ -4,9 +4,8 @@ import { requirePermission } from "@server/lib/permissions";
 import { permissionChangesSchema } from "@server/lib/schemas";
 import { requireSession } from "@server/lib/session";
 import { adminRepo } from "@server/repo/admin";
+import { roleIdFor } from "@server/repo/roles";
 
-/** Editing the owner role could remove the last way to administer anything. */
-const IMMUTABLE_ROLES = ["role_owner"];
 
 export const GET = handler(async () => {
   const { user } = await requireSession();
@@ -28,7 +27,8 @@ export const PUT = handler(async (request: Request) => {
   const result = await adminRepo.applyPermissionChanges({
     workspaceId,
     changes,
-    immutableRoleIds: IMMUTABLE_ROLES,
+    // Editing the owner role could remove the last way to administer anything.
+    immutableRoleIds: [await roleIdFor(workspaceId, "owner")],
   });
 
   if (!result.ok) {

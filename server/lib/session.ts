@@ -59,6 +59,25 @@ export async function createSession(userId: string, request?: Request): Promise<
   return sessionId;
 }
 
+/**
+ * Starts a session for this account and sets the cookie. With `replacing`,
+ * the caller's current session ends too — switching workspace or moving into
+ * a new one must not leave the old sign-in live behind the new cookie.
+ */
+export async function signInAs(userId: string, request: Request, replacing?: string): Promise<string> {
+  const sessionId = await createSession(userId, request);
+  if (replacing) await destroySession(replacing);
+  const store = await cookies();
+  store.set(env.sessionCookie, sessionId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: env.sessionTtlSeconds,
+  });
+  return sessionId;
+}
+
 export async function destroySession(sessionId: string): Promise<void> {
   await redis.del(sessionKey(sessionId));
   await query(`DELETE FROM sessions WHERE id = $1`, [sessionId]);
@@ -86,6 +105,9 @@ async function getTokenSession(): Promise<SessionContext | null> {
       `SELECT ${USER_COLUMNS}, u.workspace_id, t.id AS token_id
        FROM oauth_access_tokens t
        JOIN users u ON u.id = t.user_id
+       -- Never across workspaces, whatever row exists: the app must be one of
+       -- the user's own workspace.
+       JOIN oauth_apps a ON a.id = t.app_id AND a.workspace_id = u.workspace_id
        WHERE t.token_hash = $1 AND t.revoked_at IS NULL AND t.expires_at > now()
          AND u.account_status = 'active'`,
       [tokenHash],
@@ -106,7 +128,9 @@ async function getTokenSession(): Promise<SessionContext | null> {
   const row = await queryOne<UserRow & { workspace_id: string; token_id: string }>(
     `SELECT ${USER_COLUMNS}, u.workspace_id, t.id AS token_id
      FROM integration_tokens t
-     JOIN users u ON u.id = t.user_id
+     -- A token acts only as a bot of the workspace it was issued in. Checked
+     -- here as well as at issue, so no bad row can ever sign anyone in.
+     JOIN users u ON u.id = t.user_id AND u.workspace_id = t.workspace_id AND u.is_bot
      WHERE t.token_hash = $1 AND t.revoked_at IS NULL
        AND u.account_status = 'active'`,
     [tokenHash],

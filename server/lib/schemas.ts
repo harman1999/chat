@@ -14,6 +14,20 @@ export const loginSchema = z.object({
   email: z.string().trim().email().max(320),
   // Not `.min()`: the sign-in path must not disclose the password policy.
   password: z.string().min(1).max(512),
+  /** Which workspace's account, by slug — needed only when the email has several. */
+  workspace: z.string().trim().min(1).max(60).optional(),
+});
+
+export const createWorkspaceSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  /** The creator's current password: starting a workspace is an account-level act. */
+  password: z.string().min(1).max(512),
+});
+
+export const switchWorkspaceSchema = z.object({
+  workspaceId: z.string().min(1).max(200),
+  /** The password of the account in the target workspace — a separate account. */
+  password: z.string().min(1).max(512),
 });
 
 export const messageBodySchema = z.object({

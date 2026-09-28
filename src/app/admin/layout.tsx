@@ -2,18 +2,24 @@ import Link from "next/link";
 import { requirePage } from "@server/lib/guard";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { AdminNav } from "@/components/admin/admin-nav";
-import { AppLogoMark } from "@/components/common";
+import { workspacesRepo } from "@server/repo/workspaces";
+import { AppLogoMark, WorkspaceLogo } from "@/components/common";
 import { ThemeToggle } from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  await requirePage();
+  const { workspaceId } = await requirePage();
+  const workspace = await workspacesRepo.identity(workspaceId);
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-canvas">
       <header className="sticky top-0 z-10 flex h-[var(--spacing-topbar)] shrink-0 items-center gap-2 border-b border-border bg-surface px-3 sm:px-4">
-        <AppLogoMark />
+        <WorkspaceLogo
+          logoUrl={workspace?.logoUrl ?? null}
+          name={workspace?.name ?? ""}
+          fallback={<AppLogoMark />}
+        />
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 truncate text-sm font-semibold tracking-tight text-fg">
             Administration
@@ -22,7 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               Owner
             </Badge>
           </p>
-          <p className="truncate text-2xs text-fg-subtle">Northwind Technologies</p>
+          <p className="truncate text-2xs text-fg-subtle">{workspace?.name}</p>
         </div>
         <div className="ml-auto flex items-center gap-1">
           <ThemeToggle />

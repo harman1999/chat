@@ -50,7 +50,7 @@ export const POST = handler(async (request: Request) => {
     action: "user.created",
     category: "user",
     severity: "warning",
-    target: `${result.user.email} (${body.roleId ?? "role_member"})`,
+    target: `${result.user.email} (${body.roleId ?? "Member"})`,
     request,
   });
 

@@ -27,23 +27,35 @@ export async function assertServerRunning(): Promise<void> {
   }
 }
 
-export async function signIn(email: string, password = DEMO_PASSWORD): Promise<Client> {
+/**
+ * Signs in to the Northwind account by default. Named explicitly because an
+ * email can have accounts in several workspaces — the multi-workspace tests
+ * create one — and then sign-in asks which.
+ */
+export async function signIn(email: string, password = DEMO_PASSWORD, workspace = "northwind"): Promise<Client> {
   const response = await fetch(`${BASE_URL}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, workspace }),
   });
 
   if (!response.ok) {
     throw new Error(`Sign-in failed for ${email}: ${response.status}`);
   }
 
-  const setCookie = response.headers.get("set-cookie") ?? "";
-  const cookie = setCookie.split(";")[0];
   const body = (await response.json()) as { user: { id: string } };
+  return asClient(sessionCookieOf(response), body.user.id);
+}
 
+/** The `name=value` of the session cookie a response set. */
+export function sessionCookieOf(response: Response): string {
+  return (response.headers.get("set-cookie") ?? "").split(";")[0];
+}
+
+/** A client for a cookie some other request produced — creating or switching workspace. */
+export function asClient(cookie: string, userId: string): Client {
   return {
-    userId: body.user.id,
+    userId,
     cookie,
     fetch: (path, init = {}) =>
       fetch(`${BASE_URL}/api/v1${path}`, {

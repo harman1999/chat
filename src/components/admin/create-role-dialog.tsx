@@ -33,14 +33,17 @@ export function CreateRoleDialog({
   const [description, setDescription] = useState("");
   // Member is the sensible starting point: a new role is nearly always
   // "like Member, plus something".
-  const [copyFrom, setCopyFrom] = useState("role_member");
+  // Null until chosen, meaning Member — found by kind, since its id differs
+  // between workspaces.
+  const [chosenCopyFrom, setCopyFrom] = useState<string | null>(null);
+  const copyFrom = chosenCopyFrom ?? roles.find((role) => role.kind === "member")?.id ?? "";
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
     setName("");
     setDescription("");
-    setCopyFrom("role_member");
+    setCopyFrom(null);
     setError(null);
   };
 
