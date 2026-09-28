@@ -9,14 +9,13 @@ import { channelsRepo } from "@server/repo/channels";
  * "Open" rather than "create": asking twice returns the same conversation.
  * Anything else would split a history in two the moment both people start one
  * at once.
+ *
+ * Opening one with yourself is allowed: a private space for drafts, links and
+ * reminders, visible to nobody else.
  */
 export const POST = handler(async (request: Request) => {
   const { user, workspaceId } = await requireSession();
   const { userId } = await parseBody(request, openDirectMessageSchema);
-
-  if (userId === user.id) {
-    return problem(422, "self_dm", "You cannot start a direct message with yourself");
-  }
 
   const conversation = await channelsRepo.openDirect(workspaceId, user.id, userId);
   if (!conversation) {

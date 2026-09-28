@@ -280,3 +280,18 @@ export const incomingWebhookPayloadSchema = z.object({
 
 /** Opening a direct message needs only the other person. */
 export const openDirectMessageSchema = z.object({ userId: id });
+
+export const createRoleSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(200).optional().default(""),
+  /** Start from this role's permissions rather than from none. */
+  copyFromRoleId: id.nullable().optional().default(null),
+});
+
+/** Edits to the role × permission matrix, applied together by one Save. */
+export const permissionChangesSchema = z.object({
+  changes: z
+    .array(z.object({ roleId: id, permissionId: id, granted: z.boolean() }))
+    .min(1)
+    .max(500),
+});

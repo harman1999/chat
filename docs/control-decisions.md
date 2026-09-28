@@ -93,3 +93,12 @@ The admin dashboard's "Needs attention" panel carried two:
   not have. The row is gone and so is the `uptimePercent` field, so nothing can
   render it again. The System health panel reports what is genuinely known:
   process uptime, Redis reachability, and the last audit write.
+
+
+## Addendum — role management
+
+"Create role" and "Rename role" were deleted in Phase 11 because role CRUD beyond
+permission toggling was not modelled. **Create** and **delete** now are, with a
+real server route behind each (`POST /admin/roles`, `DELETE /admin/roles/:id`),
+so both controls have returned. **Rename** has not: it still has no route, so it
+stays absent rather than coming back as a button that lies.

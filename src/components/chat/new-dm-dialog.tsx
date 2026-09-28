@@ -45,15 +45,18 @@ export function NewDirectMessageDialog({
   const matches = useMemo(() => {
     const needle = term.trim().toLowerCase();
     return (directory ?? [])
-      // Talking to yourself is not a conversation; the API refuses it too.
-      .filter((user) => user.id !== currentUserId && !user.isBot)
+      .filter((user) => !user.isBot)
       .filter(
         (user) =>
           !needle ||
           user.displayName.toLowerCase().includes(needle) ||
           user.username.includes(needle) ||
-          user.title.toLowerCase().includes(needle),
+          user.title.toLowerCase().includes(needle) ||
+          // "me" and "you" find your own notes without remembering your name.
+          (user.id === currentUserId && ["me", "you", "notes"].some((word) => word.startsWith(needle))),
       )
+      // You first: a note-to-self is the one conversation everybody has.
+      .sort((a, b) => Number(b.id === currentUserId) - Number(a.id === currentUserId))
       .slice(0, 50);
   }, [currentUserId, directory, term]);
 
@@ -93,7 +96,8 @@ export function NewDirectMessageDialog({
         <DialogHeader>
           <DialogTitle>New direct message</DialogTitle>
           <DialogDescription>
-            Pick someone to talk to. If you already have a conversation, it opens that one.
+            Pick someone to talk to, or yourself for private notes. An existing conversation
+            reopens rather than starting over.
           </DialogDescription>
         </DialogHeader>
 
@@ -137,9 +141,14 @@ export function NewDirectMessageDialog({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-medium text-fg">
                     {user.displayName}
+                    {user.id === currentUserId && (
+                      <span className="ml-1 font-normal text-fg-subtle">(you)</span>
+                    )}
                   </span>
                   <span className="block truncate text-[0.625rem] text-fg-subtle">
-                    {user.title || `@${user.username}`}
+                    {user.id === currentUserId
+                      ? "Notes, drafts and reminders — only you can see them"
+                      : user.title || `@${user.username}`}
                   </span>
                 </span>
                 {pendingId === user.id && (

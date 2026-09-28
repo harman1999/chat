@@ -89,11 +89,15 @@ export function MessageComposer({ conversation, threadRootId, autoFocus }: Messa
   const mentionMatches = useMemo(() => {
     if (mentionQuery === null) return [];
     const needle = mentionQuery.toLowerCase();
+    // You are included. Tagging yourself is how a note-to-self becomes a
+    // reminder you can find again in Mentions. The server stores the mention
+    // but skips notifying you of something you just typed.
     return (directory ?? [])
-      .filter((user) => user.id !== currentUserId)
       .filter(
         (user) =>
-          user.username.includes(needle) || user.displayName.toLowerCase().includes(needle),
+          user.username.includes(needle) ||
+          user.displayName.toLowerCase().includes(needle) ||
+          (user.id === currentUserId && "me".startsWith(needle)),
       )
       .slice(0, 6);
   }, [currentUserId, directory, mentionQuery]);

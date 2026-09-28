@@ -226,6 +226,31 @@ export const adminService = {
     return request<Role[]>("/admin/roles");
   },
 
+  async createRole(input: {
+    name: string;
+    description?: string;
+    copyFromRoleId?: ID | null;
+  }): Promise<Role> {
+    return request<Role>("/admin/roles", { method: "POST", body: input });
+  },
+
+  /** Its members move to Member; the result says how many. */
+  async deleteRole(roleId: ID): Promise<{ movedMembers: number; movedTo: ID }> {
+    return request<{ movedMembers: number; movedTo: ID }>(`/admin/roles/${roleId}`, {
+      method: "DELETE",
+    });
+  },
+
+  /** Saves matrix edits together; either all land or none do. */
+  async savePermissionChanges(
+    changes: { roleId: ID; permissionId: ID; granted: boolean }[],
+  ): Promise<{ applied: number }> {
+    return request<{ applied: number }>("/admin/permissions", {
+      method: "PUT",
+      body: { changes },
+    });
+  },
+
   async listPermissions(): Promise<Permission[]> {
     if (USE_MOCK_TRANSPORT) return mockResolve(permissions, 200);
     return request<Permission[]>("/admin/permissions");

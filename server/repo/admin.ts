@@ -1,4 +1,5 @@
-import { query, queryOne } from "../db/client";
+import { randomUUID } from "node:crypto";
+import { query, queryOne, transaction } from "../db/client";
 import type {
   AdminUser,
   AuditLogEntry,
@@ -144,6 +145,175 @@ export const adminRepo = {
       label: row.label,
       description: row.description,
     }));
+  },
+
+  /**
+   * Creates a custom role, optionally starting from another role's permissions.
+   *
+   * Copying is the common case: a new role is nearly always "like Member, plus
+   * one thing", and starting from nothing means re-ticking twenty boxes.
+   */
+  async createRole(input: {
+    workspaceId: string;
+    name: string;
+    description: string;
+    copyFromRoleId?: string | null;
+  }): Promise<
+    | { ok: true; roleId: string }
+    | { ok: false; reason: "name_taken" | "unknown_source" }
+  > {
+    // Case-insensitive, because "Reviewer" and "reviewer" side by side in a
+    // role picker is a mistake waiting to be assigned.
+    const clash = await queryOne<{ id: string }>(
+      `SELECT id FROM roles WHERE workspace_id = $1 AND lower(name) = lower($2)`,
+      [input.workspaceId, input.name],
+    );
+    if (clash) return { ok: false, reason: "name_taken" };
+
+    if (input.copyFromRoleId) {
+      const source = await queryOne<{ id: string }>(
+        `SELECT id FROM roles WHERE id = $1 AND workspace_id = $2`,
+        [input.copyFromRoleId, input.workspaceId],
+      );
+      if (!source) return { ok: false, reason: "unknown_source" };
+    }
+
+    const roleId = `role_${randomUUID()}`;
+    await transaction(async (client) => {
+      await client.query(
+        `INSERT INTO roles (id, workspace_id, name, description, is_system)
+         VALUES ($1,$2,$3,$4,false)`,
+        [roleId, input.workspaceId, input.name, input.description],
+      );
+      if (input.copyFromRoleId) {
+        await client.query(
+          `INSERT INTO role_permissions (role_id, permission_id)
+           SELECT $1, permission_id FROM role_permissions WHERE role_id = $2`,
+          [roleId, input.copyFromRoleId],
+        );
+      }
+    });
+    return { ok: true, roleId };
+  },
+
+  /**
+   * Deletes a custom role, moving its members to a fallback role first.
+   *
+   * The move is not optional. `users.role_id` carries no foreign key, so
+   * deleting the row alone would leave its members pointing at a role that no
+   * longer exists — and every permission check for them would quietly fail
+   * rather than error. Both happen in one transaction so nobody is ever briefly
+   * roleless.
+   */
+  async deleteRole(input: {
+    workspaceId: string;
+    roleId: string;
+    fallbackRoleId: string;
+  }): Promise<
+    | { ok: true; movedMembers: number; movedUsernames: string[]; name: string }
+    | { ok: false; reason: "not_found" | "system_role" | "bad_fallback" }
+  > {
+    const role = await queryOne<{ name: string; is_system: boolean }>(
+      `SELECT name, is_system FROM roles WHERE id = $1 AND workspace_id = $2`,
+      [input.roleId, input.workspaceId],
+    );
+    if (!role) return { ok: false, reason: "not_found" };
+    // The built-in roles are what the rest of the product assumes exists.
+    if (role.is_system) return { ok: false, reason: "system_role" };
+    if (input.fallbackRoleId === input.roleId) return { ok: false, reason: "bad_fallback" };
+
+    const fallback = await queryOne<{ id: string }>(
+      `SELECT id FROM roles WHERE id = $1 AND workspace_id = $2`,
+      [input.fallbackRoleId, input.workspaceId],
+    );
+    if (!fallback) return { ok: false, reason: "bad_fallback" };
+
+    const moved = await transaction(async (client) => {
+      // RETURNING the names, so the audit can say exactly who changed. "3 moved"
+      // alone makes a deletion impossible to reconstruct or undo from the log.
+      const result = await client.query<{ username: string }>(
+        `UPDATE users SET role_id = $2, role = $3 WHERE role_id = $1 AND workspace_id = $4
+         RETURNING username`,
+        [
+          input.roleId,
+          input.fallbackRoleId,
+          // `role` is the legacy display column; keep it in step.
+          input.fallbackRoleId.replace(/^role_/, ""),
+          input.workspaceId,
+        ],
+      );
+      // role_permissions rows go with it (ON DELETE CASCADE).
+      await client.query(`DELETE FROM roles WHERE id = $1`, [input.roleId]);
+      return result.rows.map((row) => row.username).sort();
+    });
+
+    return { ok: true, movedMembers: moved.length, movedUsernames: moved, name: role.name };
+  },
+
+  /**
+   * Applies a batch of permission-matrix edits, all or nothing.
+   *
+   * The Save button promises "these N changes". Applying them one request at a
+   * time meant a failure halfway left the matrix in a state nobody chose — some
+   * edits in, some not. Everything is validated first, then written in one
+   * transaction, so the result is either every change or none.
+   */
+  async applyPermissionChanges(input: {
+    workspaceId: string;
+    changes: { roleId: string; permissionId: string; granted: boolean }[];
+    /** Roles that may never be edited — removing the owner's powers locks everyone out. */
+    immutableRoleIds: string[];
+  }): Promise<
+    | { ok: true; applied: { roleId: string; permissionId: string; granted: boolean }[] }
+    | { ok: false; reason: "immutable_role" | "unknown_role" | "unknown_permission"; id: string }
+  > {
+    const roleIds = [...new Set(input.changes.map((change) => change.roleId))];
+    const permissionIds = [...new Set(input.changes.map((change) => change.permissionId))];
+
+    for (const roleId of roleIds) {
+      if (input.immutableRoleIds.includes(roleId)) {
+        return { ok: false, reason: "immutable_role", id: roleId };
+      }
+    }
+
+    const knownRoles = new Set(
+      (
+        await query<{ id: string }>(
+          `SELECT id FROM roles WHERE workspace_id = $1 AND id = ANY($2::text[])`,
+          [input.workspaceId, roleIds],
+        )
+      ).map((row) => row.id),
+    );
+    const missingRole = roleIds.find((id) => !knownRoles.has(id));
+    if (missingRole) return { ok: false, reason: "unknown_role", id: missingRole };
+
+    const knownPermissions = new Set(
+      (
+        await query<{ id: string }>(`SELECT id FROM permissions WHERE id = ANY($1::text[])`, [
+          permissionIds,
+        ])
+      ).map((row) => row.id),
+    );
+    const missingPermission = permissionIds.find((id) => !knownPermissions.has(id));
+    if (missingPermission) return { ok: false, reason: "unknown_permission", id: missingPermission };
+
+    await transaction(async (client) => {
+      for (const change of input.changes) {
+        if (change.granted) {
+          await client.query(
+            `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+            [change.roleId, change.permissionId],
+          );
+        } else {
+          await client.query(
+            `DELETE FROM role_permissions WHERE role_id = $1 AND permission_id = $2`,
+            [change.roleId, change.permissionId],
+          );
+        }
+      }
+    });
+
+    return { ok: true, applied: input.changes };
   },
 
   async setRolePermission(roleId: string, permissionId: string, granted: boolean): Promise<void> {

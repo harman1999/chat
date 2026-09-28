@@ -43,11 +43,18 @@ const CHANNEL_SELECT = `
               AND m.created_at > cm.last_read_at) AS mention_count,
          (SELECT array_agg(cm2.user_id ORDER BY cm2.joined_at) FROM channel_members cm2
             WHERE cm2.channel_id = c.id) AS member_ids,
-         (SELECT array_agg(cm3.user_id) FROM channel_members cm3
-            WHERE cm3.channel_id = c.id AND cm3.user_id <> $2) AS participant_ids,
-         (SELECT string_agg(u2.display_name, ', ' ORDER BY u2.display_name)
-            FROM channel_members cm4 JOIN users u2 ON u2.id = cm4.user_id
-            WHERE cm4.channel_id = c.id AND cm4.user_id <> $2) AS dm_name
+         -- A conversation with yourself has nobody "else" in it, so both of
+         -- these would be null. They fall back to the caller, which gives a
+         -- note-to-self your own name and avatar instead of a blank row.
+         COALESCE(
+           (SELECT array_agg(cm3.user_id) FROM channel_members cm3
+              WHERE cm3.channel_id = c.id AND cm3.user_id <> $2),
+           ARRAY[$2::text]) AS participant_ids,
+         COALESCE(
+           (SELECT string_agg(u2.display_name, ', ' ORDER BY u2.display_name)
+              FROM channel_members cm4 JOIN users u2 ON u2.id = cm4.user_id
+              WHERE cm4.channel_id = c.id AND cm4.user_id <> $2),
+           (SELECT u5.display_name FROM users u5 WHERE u5.id = $2)) AS dm_name
   FROM channels c
   JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
 `;
@@ -115,19 +122,23 @@ export const channelsRepo = {
     userId: string,
     otherUserId: string,
   ): Promise<Channel | null> {
-    if (userId === otherUserId) return null;
+    // One member when it is a note to yourself, two otherwise.
+    const memberIds = [...new Set([userId, otherUserId])];
 
+    // Matches on *exactly* these members: every member is one of them, and
+    // there are exactly as many as expected. So a group DM that includes both
+    // is never mistaken for their private one, and your note-to-self is never
+    // mistaken for a conversation you merely belong to.
     const existing = await queryOne<{ id: string }>(
       `SELECT c.id
          FROM channels c
          JOIN channel_members m ON m.channel_id = c.id
         WHERE c.workspace_id = $1 AND c.kind = 'dm'
         GROUP BY c.id
-       HAVING count(*) = 2
-          AND bool_or(m.user_id = $2)
-          AND bool_or(m.user_id = $3)
+       HAVING count(*) = $3
+          AND bool_and(m.user_id = ANY($2::text[]))
         LIMIT 1`,
-      [workspaceId, userId, otherUserId],
+      [workspaceId, memberIds, memberIds.length],
     );
     if (existing) return channelsRepo.get(existing.id, userId, workspaceId);
 
@@ -148,14 +159,14 @@ export const channelsRepo = {
          SELECT $1, u.id, now() FROM users u
           WHERE u.id = ANY($2::text[]) AND u.workspace_id = $3
             AND u.account_status <> 'deactivated'`,
-        [id, [userId, otherUserId], workspaceId],
+        [id, memberIds, workspaceId],
       );
     });
 
-    // A deactivated or absent counterpart inserts one member, not two — which
-    // would be a conversation with nobody in it.
+    // A deactivated or absent counterpart inserts fewer members than asked for
+    // — a conversation with nobody on the other end.
     const created = await channelsRepo.get(id, userId, workspaceId);
-    if (created && created.memberCount < 2) {
+    if (created && created.memberCount < memberIds.length) {
       await query(`DELETE FROM channels WHERE id = $1`, [id]);
       return null;
     }
