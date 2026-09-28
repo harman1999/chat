@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <SheetDescription className="sr-only">
             Channels, direct messages and workspace navigation.
           </SheetDescription>
-          <WorkspaceSidebar showCollapseToggle={false} onClose={() => setDrawerOpen(false)} />
+          <WorkspaceSidebar onClose={() => setDrawerOpen(false)} />
         </SheetContent>
       </Sheet>
 

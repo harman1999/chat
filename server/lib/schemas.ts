@@ -295,3 +295,16 @@ export const permissionChangesSchema = z.object({
     .min(1)
     .max(500),
 });
+
+export const createInviteSchema = z.object({
+  expiresInDays: z.union([z.literal(1), z.literal(7), z.literal(30)]).default(7),
+  /** null for unlimited uses until it expires. */
+  maxUses: z.number().int().min(1).max(1000).nullable().default(null),
+});
+
+/** Joining through an invite link — the invitee chooses their own password. */
+export const acceptInviteSchema = z.object({
+  fullName: z.string().trim().min(1).max(120),
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(12).max(200),
+});

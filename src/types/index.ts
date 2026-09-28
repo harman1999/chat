@@ -557,3 +557,26 @@ export interface SlashCommandResult {
   responseType: "ephemeral" | "in_channel";
   text: string;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Invite links                                                              */
+/* -------------------------------------------------------------------------- */
+
+/** An active invite link, as its creator sees it. The token itself is shown once. */
+export interface InviteLink {
+  id: ID;
+  tokenPrefix: string;
+  createdAt: string;
+  expiresAt: string;
+  /** null means unlimited until it expires. */
+  maxUses: number | null;
+  useCount: number;
+  createdByName: string;
+}
+
+/** What someone opening an invite link sees before joining. */
+export interface InvitePreview {
+  workspaceName: string;
+  invitedByName: string;
+  expiresAt: string;
+}

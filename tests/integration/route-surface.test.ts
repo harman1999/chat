@@ -38,6 +38,7 @@ const PARAMS: Record<string, string> = {
   // check must fire before the lookup, so these must still give 401 or 403.
   secret: "hlx_hook_not-a-real-secret",
   tokenId: "tok_does_not_exist",
+  token: "hlx_inv_not-a-real-token",
 };
 
 function discover(dir = API_ROOT, segments: string[] = []): Route[] {
@@ -91,6 +92,13 @@ const PUBLIC = new Set([
    * shape because OAuth clients expect that.
    */
   "POST /oauth/token",
+  /**
+   * Joining through an invite link. The person opening it has no account yet,
+   * so there is no session to require — the token in the path is the
+   * credential. It is rate-limited by IP and only ever grants the Member role.
+   */
+  "GET /join/[token]",
+  "POST /join/[token]",
 ]);
 
 describe("route surface", () => {

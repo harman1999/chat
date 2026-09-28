@@ -102,3 +102,16 @@ permission toggling was not modelled. **Create** and **delete** now are, with a
 real server route behind each (`POST /admin/roles`, `DELETE /admin/roles/:id`),
 so both controls have returned. **Rename** has not: it still has no route, so it
 stays absent rather than coming back as a button that lies.
+
+
+## Addendum — invitations, answered
+
+Phase 11 left invitations unbuilt because they need outbound email, and said a
+copy-this-link workaround "would be a different feature wearing their labels".
+
+An invite *link* is that different feature, built honestly and labelled as what
+it is: "Invite people" makes a link, the dialog says plainly that nothing is
+emailed, and the invitee sets their own password. It is not an email invitation
+with the email removed — it is the model Slack and Discord use by design.
+"Resend invitation" still does not exist, because there is still nothing to
+resend.

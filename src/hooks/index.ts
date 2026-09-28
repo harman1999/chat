@@ -16,6 +16,7 @@ export { usePreferences, useTimeFormatter } from "./usePreferences";
 export { useDrafts } from "./useDrafts";
 export type { DraftEntry } from "./useDrafts";
 export { useSlashCommands } from "./useSlashCommands";
+export { usePermission } from "./usePermissions";
 export { useSaved } from "./useSaved";
 export { useMessageActions } from "./useMessageActions";
 export { useMessages } from "./useMessages";
