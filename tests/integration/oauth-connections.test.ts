@@ -57,7 +57,18 @@ describe("using an outgoing OAuth connection", () => {
     receiverUrl = `http://127.0.0.1:${(receiver.address() as { port: number }).port}/hook`;
   });
 
+  // The suite posts real messages into #general to trigger webhooks. It shares a
+  // database with whoever is using the app, so it removes them afterwards: only
+  // these exact texts, only from the owner, only if posted during this run.
+  const startedAt = new Date();
+  const POSTED = ["authcheck please", "noauth please"];
+
   afterAll(async () => {
+    await db().query(
+      `DELETE FROM messages WHERE channel_id = 'ch_general' AND author_id = 'u_harman'
+         AND body = ANY($1::text[]) AND created_at >= $2`,
+      [POSTED, startedAt],
+    );
     provider.close();
     receiver.close();
     await db().query(`DELETE FROM outgoing_webhooks WHERE name LIKE 'conn-test-%'`);
