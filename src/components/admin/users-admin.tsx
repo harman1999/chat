@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Ban, Check, KeyRound, MoreHorizontal, ShieldCheck, ShieldOff, UserPlus } from "lucide-react";
+import { Ban, Check, KeyRound, MoreHorizontal, ShieldCheck, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { UserAvatar } from "@/components/common";
@@ -48,6 +48,48 @@ export function UsersAdmin() {
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
   const [revealed, setRevealed] = useState<TemporaryPassword | null>(null);
   const currentUserId = useCurrentUserId();
+
+  const setStatus = async (row: AdminUser, status: "active" | "deactivated") => {
+    await adminService.setUserStatus(row.id, status);
+    await usersQuery.refetch();
+  };
+
+  const reactivate = async (row: AdminUser) => {
+    try {
+      await setStatus(row, "active");
+      toast.success("Account reactivated", { description: `${row.displayName} can sign in again.` });
+    } catch (error) {
+      toast.error("Could not reactivate the account", {
+        description: isApiError(error) ? error.message : undefined,
+      });
+    }
+  };
+
+  const askToDeactivate = (row: AdminUser) =>
+    setConfirm({
+      title: `Deactivate ${row.displayName}?`,
+      destructive: true,
+      confirmLabel: "Yes, deactivate",
+      cancelLabel: "No",
+      description: (
+        <>
+          They are signed out everywhere at once and cannot sign in until you reactivate them. Their
+          messages stay. To let them back in later, use <strong>Reactivate account</strong> in the same
+          menu.
+        </>
+      ),
+      onConfirm: async () => {
+        try {
+          await setStatus(row, "deactivated");
+          toast.success("Account deactivated", { description: row.displayName });
+        } catch (error) {
+          toast.error("Could not deactivate the account", {
+            description: isApiError(error) ? error.message : undefined,
+          });
+          throw error;
+        }
+      },
+    });
 
   const askToResetPassword = (row: AdminUser) =>
     setConfirm({
@@ -124,23 +166,6 @@ export function UsersAdmin() {
       ),
     },
     {
-      id: "twoFactor",
-      header: "2FA",
-      sortValue: (row) => (row.twoFactorEnabled ? 1 : 0),
-      cell: (row) =>
-        row.twoFactorEnabled ? (
-          <span className="flex items-center gap-1 text-2xs text-success">
-            <ShieldCheck className="size-3.5" aria-hidden />
-            On
-          </span>
-        ) : (
-          <span className="flex items-center gap-1 text-2xs text-fg-subtle">
-            <ShieldOff className="size-3.5" aria-hidden />
-            Off
-          </span>
-        ),
-    },
-    {
       id: "messages",
       header: "Messages",
       align: "right",
@@ -209,23 +234,21 @@ export function UsersAdmin() {
               Reset password
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="danger"
-              onSelect={async () => {
-                try {
-                  await adminService.setUserStatus(row.id, "deactivated");
-                  await usersQuery.refetch();
-                  toast.success("Account deactivated", { description: row.displayName });
-                } catch {
-                  toast.error("Could not deactivate account", {
-                    description: "You may not have permission.",
-                  });
-                }
-              }}
-            >
-              <Ban />
-              Deactivate account
-            </DropdownMenuItem>
+            {row.status === "deactivated" ? (
+              <DropdownMenuItem onSelect={() => void reactivate(row)}>
+                <Check />
+                Reactivate account
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                variant="danger"
+                disabled={row.id === currentUserId}
+                onSelect={() => askToDeactivate(row)}
+              >
+                <Ban />
+                Deactivate account
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),

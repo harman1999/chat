@@ -156,7 +156,6 @@ export const systemSettingsSchema = z
       .nullable(),
     fileRetentionDays: z.number().int().min(0).max(36_500).nullable(),
     maxUploadMb: z.number().int().min(1).max(5_000),
-    requireTwoFactor: z.boolean(),
     sessionTimeoutHours: z.number().int().min(1).max(8_760),
   })
   .partial();

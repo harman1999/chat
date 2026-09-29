@@ -148,3 +148,14 @@ The "Message retention" control used to save a value nothing acted on, which
 made it a control that lied. It now deletes, permanently, and asks first —
 showing how many messages are due. `fileRetentionDays` has no control and is not
 enforced.
+
+## Addendum — two-factor authentication: deleted
+
+Three controls claimed two-factor authentication — a "2FA" column on the Users
+page, a "Require two-factor" switch, and a dashboard warning that it was not
+enforced. There is no way to enrol or to check a code, so the column showed seed
+data, the switch reported success without saving, and the warning pointed at a
+switch that could not work. All three were deleted, on the same rule as the rest
+of this document: a control that lies is worse than none. If two-factor is built
+it should arrive with its controls, not before them.
+

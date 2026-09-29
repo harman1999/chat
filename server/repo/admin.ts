@@ -82,14 +82,13 @@ export const adminRepo = {
         account_status: AdminUser["status"];
         role_id: string | null;
         last_sign_in_at: Date | null;
-        two_factor_enabled: boolean;
         created_at: Date;
         message_count: string;
         member_role_id: string | null;
       }
     >(
       `SELECT ${USER_COLUMNS}, u.account_status, u.role_id, u.last_sign_in_at,
-              u.two_factor_enabled, u.created_at,
+              u.created_at,
               (SELECT count(*) FROM messages m WHERE m.author_id = u.id) AS message_count,
               (SELECT r.id FROM roles r WHERE r.workspace_id = u.workspace_id AND r.kind = 'member') AS member_role_id
        FROM users u WHERE u.workspace_id = $1 ORDER BY u.display_name
@@ -103,7 +102,6 @@ export const adminRepo = {
       // No role recorded means the default one — this workspace's Member.
       roleId: row.role_id ?? row.member_role_id ?? "",
       lastSignInAt: row.last_sign_in_at?.toISOString() ?? null,
-      twoFactorEnabled: row.two_factor_enabled,
       createdAt: row.created_at.toISOString(),
       messageCount: Number(row.message_count),
     }));

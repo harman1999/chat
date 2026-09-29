@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, Home, MessagesSquare, MoreHorizontal, Search } from "lucide-react";
-import { useMentions, useThreadUnreadTotal } from "@/hooks";
+import { useThreadUnreadTotal, useUnreadMentionTotal } from "@/hooks";
 import { useUIStore, useWorkspaceStore, type NavSection } from "@/store";
 import { cn } from "@/lib/utils";
 
@@ -26,11 +26,11 @@ export function MobileTabBar() {
   const setSearchOpen = useUIStore((state) => state.setSearchOpen);
   const setDrawerOpen = useUIStore((state) => state.setSidebarDrawerOpen);
   const unreadThreads = useThreadUnreadTotal();
-  const { data: mentions } = useMentions();
+  const unreadMentions = useUnreadMentionTotal();
 
   const badgeFor = (id: (typeof TABS)[number]["id"]) => {
     if (id === "threads") return unreadThreads;
-    if (id === "mentions") return mentions?.length ?? 0;
+    if (id === "mentions") return unreadMentions;
     return 0;
   };
 

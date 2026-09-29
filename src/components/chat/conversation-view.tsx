@@ -3,7 +3,7 @@
 import { MessagesSquare } from "lucide-react";
 import { EmptyState } from "@/components/common";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useActiveConversation } from "@/hooks";
+import { useActiveConversation, useMarkConversationRead } from "@/hooks";
 import { useMessageStore, useSettingsStore } from "@/store";
 import { ChannelHeader } from "./channel-header";
 import { MessageComposer } from "./composer/message-composer";
@@ -21,6 +21,7 @@ export function ConversationView() {
     (state) => state.typingByChannel[conversation?.id ?? ""] ?? EMPTY,
   );
   const showTypingIndicators = useSettingsStore((state) => state.messages.showTypingIndicators);
+  useMarkConversationRead(conversation?.id);
 
   if (isPending) {
     return (

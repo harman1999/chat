@@ -301,9 +301,22 @@ export const channelsRepo = {
     await query(`UPDATE channels SET is_archived = $2 WHERE id = $1`, [channelId, isArchived]);
   },
 
+  /**
+   * Marks a conversation read for one person: everything up to now, and the
+   * notifications it produced. Both are the caller's own rows only, so it
+   * cannot be used on someone else's read state.
+   *
+   * Notifications go with it because a mention is shown twice — as a badge on
+   * the channel and as an entry in the bell — and reading the channel and
+   * still being told about it would be the same unread message counted twice.
+   */
   async markRead(channelId: string, userId: string): Promise<void> {
     await query(
       `UPDATE channel_members SET last_read_at = now() WHERE channel_id = $1 AND user_id = $2`,
+      [channelId, userId],
+    );
+    await query(
+      `UPDATE notifications SET is_read = true WHERE channel_id = $1 AND user_id = $2 AND NOT is_read`,
       [channelId, userId],
     );
   },

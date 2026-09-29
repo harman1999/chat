@@ -23,7 +23,6 @@ export function AuthenticationAdmin() {
   });
 
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
-  const [requireTwoFactor, setRequireTwoFactor] = useState(false);
   const [minLength, setMinLength] = useState("12");
   const [sessionTimeout, setSessionTimeout] = useState<"24" | "168" | "720">("720");
 
@@ -117,21 +116,6 @@ export function AuthenticationAdmin() {
                 value={minLength}
                 onChange={(event) => setMinLength(event.target.value)}
                 className="w-24"
-              />
-            }
-          />
-          <SettingRow
-            label="Require two-factor authentication"
-            description="Everyone must enrol before they can post."
-            htmlFor="auth-2fa"
-            control={
-              <Switch
-                id="auth-2fa"
-                checked={requireTwoFactor}
-                onCheckedChange={(checked) => {
-                  setRequireTwoFactor(checked);
-                  toast.success(checked ? "Two-factor now required" : "Two-factor requirement removed");
-                }}
               />
             }
           />

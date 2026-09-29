@@ -3,6 +3,7 @@ export { useActiveConversation, useConversation } from "./useConversation";
 export { useCurrentUser } from "./useCurrentUser";
 export {
   useConversationMap,
+  useUnreadMentionTotal,
   useCurrentUserId,
   useUser,
   useUserMap,
@@ -11,13 +12,14 @@ export {
 export { useElementWidth } from "./useElementWidth";
 export { useHotkeys } from "./useHotkeys";
 export { useJumpToMessage } from "./useJumpToMessage";
+export { useMarkConversationRead } from "./useMarkConversationRead";
 export { useMentions } from "./useMentions";
 export { useNotifications } from "./useNotifications";
 export { usePreferences, useTimeFormatter } from "./usePreferences";
 export { useDrafts } from "./useDrafts";
 export type { DraftEntry } from "./useDrafts";
 export { useSlashCommands } from "./useSlashCommands";
-export { usePermission } from "./usePermissions";
+export { useCanAdminister, usePermission } from "./usePermissions";
 export { useSaved } from "./useSaved";
 export { useMessageActions } from "./useMessageActions";
 export { useMessages } from "./useMessages";

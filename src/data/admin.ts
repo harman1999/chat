@@ -128,7 +128,6 @@ function generateDirectory(): AdminUser[] {
     roleId:
       user.role === "owner" ? "role_owner" : user.role === "admin" ? "role_admin" : user.isBot ? "role_guest" : "role_member",
     lastSignInAt: hoursAgo(index * 3),
-    twoFactorEnabled: index % 3 !== 2,
     createdAt: daysAgo(400 - index * 17),
     messageCount: 2400 - index * 137,
   }));
@@ -161,7 +160,6 @@ function generateDirectory(): AdminUser[] {
       status,
       roleId,
       lastSignInAt: status === "invited" ? null : daysAgo((index % 21) + 0.2),
-      twoFactorEnabled: index % 4 !== 0,
       createdAt: daysAgo(360 - index * 6),
       messageCount: status === "invited" ? 0 : 40 + ((index * 53) % 900),
     };
@@ -249,7 +247,6 @@ export const systemSettings: SystemSettings = {
   messageRetentionDays: null,
   fileRetentionDays: 730,
   maxUploadMb: 50,
-  requireTwoFactor: false,
   sessionTimeoutHours: 720,
 };
 

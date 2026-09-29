@@ -326,7 +326,6 @@ export interface AdminUser extends User {
   status: AccountStatus;
   roleId: ID;
   lastSignInAt: string | null;
-  twoFactorEnabled: boolean;
   createdAt: string;
   messageCount: number;
 }
@@ -449,7 +448,6 @@ export interface SystemSettings {
   messageRetentionDays: number | null;
   fileRetentionDays: number | null;
   maxUploadMb: number;
-  requireTwoFactor: boolean;
   sessionTimeoutHours: number;
 }
 

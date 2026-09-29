@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { HardDrive, Hash, MessageSquare, ShieldCheck, ShieldOff, Users } from "lucide-react";
+import { HardDrive, Hash, MessageSquare, Users } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { UserAvatar } from "@/components/common";
@@ -51,10 +51,6 @@ export function DashboardAdmin() {
     queryFn: () => adminService.activity(30),
   });
   const auditQuery = useQuery({ queryKey: ["admin-audit-log"], queryFn: () => adminService.auditLog() });
-  const settingsQuery = useQuery({
-    queryKey: ["admin-settings"],
-    queryFn: () => adminService.settings(),
-  });
 
   const series = useMemo(
     () => (activityQuery.data ?? []).slice(-range),
@@ -207,25 +203,6 @@ export function DashboardAdmin() {
               <h2 className="text-sm font-semibold text-fg">Needs attention</h2>
             </header>
             <ul className="divide-y divide-border text-sm">
-              {/* Read from settings rather than stated. The line used to be
-                  static text, so it would have gone on claiming 2FA was
-                  unenforced after someone enforced it. */}
-              {settingsQuery.data && (
-                <li className="flex items-center gap-2.5 px-4 py-3">
-                  {settingsQuery.data.requireTwoFactor ? (
-                    <ShieldCheck className="size-4 shrink-0 text-success" aria-hidden />
-                  ) : (
-                    <ShieldOff className="size-4 shrink-0 text-warning" aria-hidden />
-                  )}
-                  <span className="min-w-0 flex-1 text-xs text-fg-muted">
-                    Two-factor authentication is
-                    {settingsQuery.data.requireTwoFactor ? " enforced" : " not enforced"}
-                  </span>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href="/admin/authentication">Review</Link>
-                  </Button>
-                </li>
-              )}
               <li className="flex items-center gap-2.5 px-4 py-3">
                 <Users className="size-4 shrink-0 text-fg-subtle" aria-hidden />
                 <span className="min-w-0 flex-1 text-xs text-fg-muted">

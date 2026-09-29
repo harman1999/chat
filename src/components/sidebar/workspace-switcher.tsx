@@ -14,7 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { AppLogoMark, WorkspaceLogo } from "@/components/common";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePermission } from "@/hooks";
+import { useCanAdminister, usePermission } from "@/hooks";
 import { authService } from "@/services";
 import { APP } from "@/lib/constants";
 import { reloadAs } from "@/lib/navigation";
@@ -54,6 +54,7 @@ export function WorkspaceSwitcher({
     workspaces.find((workspace) => workspace.id === workspaceId) ??
     workspaces[0];
   const canCreate = usePermission("p_workspace_create");
+  const canAdminister = useCanAdminister();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [switchTarget, setSwitchTarget] = useState<Workspace | null>(null);
   // Only offered to people who can actually invite, rather than shown to
@@ -193,10 +194,12 @@ export function WorkspaceSwitcher({
           <Settings2 />
           Workspace settings
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => router.push("/admin")}>
-          <ShieldCheck />
-          Administration
-        </DropdownMenuItem>
+        {canAdminister && (
+          <DropdownMenuItem onSelect={() => router.push("/admin")}>
+            <ShieldCheck />
+            Administration
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="danger"

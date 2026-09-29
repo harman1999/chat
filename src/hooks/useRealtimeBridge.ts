@@ -31,11 +31,29 @@ export function useRealtimeBridge() {
   useEffect(() => {
     const store = useMessageStore.getState;
 
+    // A new message changes the unread and mention counts the sidebar shows,
+    // and nothing else told it. One refetch per burst, not one per message.
+    let countsTimer: ReturnType<typeof setTimeout> | undefined;
+    const refreshCounts = () => {
+      clearTimeout(countsTimer);
+      countsTimer = setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ["channels"] });
+        void queryClient.invalidateQueries({ queryKey: ["dms"] });
+      }, 500);
+    };
+
     const unsubscribes = [
       realtimeClient.on<Message>("message.created", ({ payload }) => {
         if (payload.threadRootId) store().addReply(payload.threadRootId, payload);
         else store().upsert(payload);
         store().setTyping(payload.channelId, payload.authorId, false);
+        refreshCounts();
+      }),
+
+      // The server sends this to the person mentioned; nothing listened, so the
+      // bell only caught up on a reload.
+      realtimeClient.on("notification.created", () => {
+        void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       }),
 
       realtimeClient.on<Message>("message.updated", ({ payload }) => {
@@ -87,6 +105,7 @@ export function useRealtimeBridge() {
     realtimeClient.connect();
 
     return () => {
+      clearTimeout(countsTimer);
       unsubscribes.forEach((unsubscribe) => unsubscribe());
     };
   }, [queryClient]);

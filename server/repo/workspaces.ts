@@ -40,7 +40,6 @@ export function defaultSettings(slug: string, generalChannelId: string | null): 
     messageRetentionDays: null,
     fileRetentionDays: null,
     maxUploadMb: 50,
-    requireTwoFactor: false,
     sessionTimeoutHours: 720,
   };
 }

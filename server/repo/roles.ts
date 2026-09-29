@@ -26,3 +26,13 @@ export async function kindOf(workspaceId: string, roleId: string): Promise<RoleK
   );
   return row?.kind ?? null;
 }
+
+/** The name of a person's role, for showing which one they hold. */
+export async function roleNameOf(userId: string): Promise<string | null> {
+  const row = await queryOne<{ name: string }>(
+    `SELECT r.name FROM users u JOIN roles r ON r.id = u.role_id AND r.workspace_id = u.workspace_id
+      WHERE u.id = $1`,
+    [userId],
+  );
+  return row?.name ?? null;
+}

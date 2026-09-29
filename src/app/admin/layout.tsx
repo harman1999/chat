@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePage } from "@server/lib/guard";
+import { hasAnyPermission } from "@server/lib/permissions";
+import { roleNameOf } from "@server/repo/roles";
+import { ADMIN_PERMISSIONS } from "@/lib/permissions";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { workspacesRepo } from "@server/repo/workspaces";
@@ -9,8 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { workspaceId } = await requirePage();
-  const workspace = await workspacesRepo.identity(workspaceId);
+  const { user, workspaceId } = await requirePage();
+  // Every API behind these pages already refuses non-administrators; this keeps
+  // them from being shown an admin shell full of errors.
+  if (!(await hasAnyPermission(user.id, ADMIN_PERMISSIONS))) redirect("/workspace");
+  const [workspace, roleName] = await Promise.all([
+    workspacesRepo.identity(workspaceId),
+    roleNameOf(user.id),
+  ]);
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-canvas">
@@ -25,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Administration
             <Badge variant="accent-subtle" size="sm" className="gap-1">
               <ShieldCheck className="size-2.5" aria-hidden />
-              Owner
+              {roleName ?? "Admin"}
             </Badge>
           </p>
           <p className="truncate text-2xs text-fg-subtle">{workspace?.name}</p>

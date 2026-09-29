@@ -11,7 +11,6 @@ describe("administrator password reset", () => {
   const tag = Date.now().toString(36);
   const PASSWORD = "an-original-password";
   let owner: Client;
-  let admin: Client; // Alice
   let member: Client; // Bob
   let victim: { id: string; email: string };
   let victimAdmin: { id: string; email: string };
@@ -39,7 +38,6 @@ describe("administrator password reset", () => {
   beforeAll(async () => {
     await assertServerRunning();
     owner = await signIn(ACCOUNTS.owner);
-    admin = await signIn(ACCOUNTS.admin);
     member = await signIn(ACCOUNTS.member);
     victim = await create("member", "role_member");
     victimAdmin = await create("admin", "role_admin");
