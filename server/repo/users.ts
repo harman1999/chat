@@ -271,6 +271,7 @@ export const usersRepo = {
               w.id AS workspace_id, w.slug AS workspace_slug, w.name AS workspace_name
          FROM users u JOIN workspaces w ON w.id = u.workspace_id
         WHERE lower(u.email) = lower($1) AND NOT u.is_bot
+          AND w.archived_at IS NULL
           AND ($2::text IS NULL OR w.slug = $2)
         ORDER BY w.name
         LIMIT 50`,

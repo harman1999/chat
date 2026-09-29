@@ -24,6 +24,7 @@ export { useSaved } from "./useSaved";
 export { useMessageActions } from "./useMessageActions";
 export { useMessages } from "./useMessages";
 export { useRealtimeBridge } from "./useRealtimeBridge";
+export { useTeams } from "./useTeams";
 export { useThread } from "./useThread";
 export { useThreadInbox, useThreadUnreadTotal } from "./useThreadInbox";
 export type { HotkeyBinding } from "./useHotkeys";

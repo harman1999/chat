@@ -115,7 +115,7 @@ export interface Workspace {
   initials: string;
   /** Uploaded logo, or null to show the default mark. */
   logoUrl: string | null;
-  /** The one signed in to. Others are separate accounts, reached by switching. */
+  /** Always the workspace you are in; there is one. */
   isCurrent: boolean;
   plan: "free" | "business" | "enterprise";
   memberCount: number;
@@ -152,6 +152,20 @@ export interface Channel {
   createdBy: ID;
   /** For DMs: the other participant(s). */
   participantIds?: ID[];
+  /** The team this channel belongs to, if any. */
+  teamId: ID | null;
+}
+
+/** A named group of people inside the workspace, with channels of its own. */
+export interface Team {
+  id: ID;
+  name: string;
+  description: string;
+  memberCount: number;
+  channelCount: number;
+  /** Whether the person asking is in it. */
+  isMember: boolean;
+  createdAt: string;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -12,10 +12,10 @@ export const GET = handler(async () => {
   const rows = await query<{
     id: string; kind: Channel["kind"]; name: string; purpose: string; description: string;
     topic: string | null; member_count: number; is_archived: boolean;
-    last_message_at: Date | null; created_by: string | null; created_at: Date;
+    last_message_at: Date | null; created_by: string | null; created_at: Date; team_id: string | null;
   }>(
     `SELECT id, kind, name, purpose, description, topic, member_count, is_archived,
-            last_message_at, created_by, created_at
+            last_message_at, created_by, created_at, team_id
      FROM channels WHERE workspace_id = $1 AND kind IN ('public','private')
      ORDER BY name`,
     [workspaceId],
@@ -40,6 +40,7 @@ export const GET = handler(async () => {
       lastMessageAt: row.last_message_at?.toISOString() ?? null,
       createdAt: row.created_at.toISOString(),
       createdBy: row.created_by ?? "",
+      teamId: row.team_id,
     })),
   );
 });

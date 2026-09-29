@@ -142,7 +142,8 @@ async function getTokenSession(): Promise<SessionContext | null> {
        -- the user's own workspace.
        JOIN oauth_apps a ON a.id = t.app_id AND a.workspace_id = u.workspace_id
        WHERE t.token_hash = $1 AND t.revoked_at IS NULL AND t.expires_at > now()
-         AND u.account_status = 'active'`,
+         AND u.account_status = 'active'
+         AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = u.workspace_id AND w.archived_at IS NOT NULL)`,
       [tokenHash],
     );
     if (!granted) return null;
@@ -165,7 +166,8 @@ async function getTokenSession(): Promise<SessionContext | null> {
      -- here as well as at issue, so no bad row can ever sign anyone in.
      JOIN users u ON u.id = t.user_id AND u.workspace_id = t.workspace_id AND u.is_bot
      WHERE t.token_hash = $1 AND t.revoked_at IS NULL
-       AND u.account_status = 'active'`,
+       AND u.account_status = 'active'
+       AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = u.workspace_id AND w.archived_at IS NOT NULL)`,
     [tokenHash],
   );
   if (!row) return null;
@@ -206,7 +208,10 @@ export async function getSession(): Promise<SessionContext | null> {
   }
 
   const user = await queryOne<UserRow & { workspace_id: string }>(
-    `SELECT ${USER_COLUMNS}, u.workspace_id FROM users u WHERE u.id = $1`,
+    // A workspace that has been put away (archived_at) lets nobody in, whatever
+    // session they still hold.
+    `SELECT ${USER_COLUMNS}, u.workspace_id FROM users u WHERE u.id = $1
+       AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = u.workspace_id AND w.archived_at IS NOT NULL)`,
     [userId],
   );
   if (!user) return null;

@@ -18,18 +18,6 @@ export const loginSchema = z.object({
   workspace: z.string().trim().min(1).max(60).optional(),
 });
 
-export const createWorkspaceSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  /** The creator's current password: starting a workspace is an account-level act. */
-  password: z.string().min(1).max(512),
-});
-
-export const switchWorkspaceSchema = z.object({
-  workspaceId: z.string().min(1).max(200),
-  /** The password of the account in the target workspace — a separate account. */
-  password: z.string().min(1).max(512),
-});
-
 export const messageBodySchema = z.object({
   body: z.string().max(12_000).optional().default(""),
   threadRootId: id.nullish(),
@@ -171,6 +159,27 @@ export const createChannelSchema = z.object({
   purpose: z.string().trim().max(250).optional().default(""),
   kind: z.enum(["public", "private"]).default("public"),
   memberIds: z.array(id).max(200).optional(),
+  /** Create it inside a team, whose people are all added. Needs p_team_manage. */
+  teamId: id.optional(),
+});
+
+export const createTeamSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(250).optional().default(""),
+  /** People to add straight away. */
+  memberIds: z.array(id).max(200).optional(),
+});
+
+export const updateTeamSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    description: z.string().trim().max(250),
+  })
+  .partial()
+  .refine((patch) => patch.name !== undefined || patch.description !== undefined, "Nothing to change");
+
+export const addTeamMembersSchema = z.object({
+  userIds: z.array(id).min(1).max(200),
 });
 
 export const addMembersSchema = z.object({

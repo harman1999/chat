@@ -25,6 +25,7 @@ const channel: Channel = {
   lastMessageAt: null,
   createdBy: author.id,
   createdAt: new Date().toISOString(),
+  teamId: null,
 };
 
 const entry: ThreadInboxEntry = {

@@ -31,6 +31,7 @@ const PARAMS: Record<string, string> = {
   id: "ch_general",
   rootId: "m_gen_6",
   userId: "u_bob",
+  channelId: "ch_general",
   roleId: "role_member",
   permissionId: "perm_channel_create",
   emoji: "%F0%9F%91%8D",

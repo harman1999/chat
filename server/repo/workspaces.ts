@@ -57,11 +57,13 @@ export function slugFrom(name: string): string {
 
 export const workspacesRepo = {
   /**
-   * Creates a workspace with its creator as owner.
+   * Creates a separate workspace with an existing person as its owner.
    *
-   * Workspaces are separate: the creator gets a new account in it — same
-   * email, name and password as the account they created it from, so they can
-   * sign straight in, but a distinct row they can change independently. The
+   * There is no screen for this: the workspace is fixed and groups of people
+   * inside it are teams. It remains for an operator provisioning another
+   * workspace, and for tests that need a second one to prove the two are kept
+   * apart. The owner gets a new account there — same email, name and password
+   * as the account they are made from, but a distinct row. The
    * built-in roles start as copies of the creator's workspace's, and the owner
    * role always holds every permission. A #general channel is made so the
    * first screen is not empty.
@@ -157,23 +159,6 @@ export const workspacesRepo = {
 
       return { workspaceId, userId, slug };
     });
-  },
-
-  /**
-   * Workspaces where an account with this email exists, for the switcher and
-   * the sign-in chooser. Each is a separate account: listing one here says it
-   * exists, but getting into it still takes that account's password.
-   */
-  async withAccountFor(email: string): Promise<{ id: string; name: string; slug: string; logoUrl: string | null }[]> {
-    const rows = await query<{ id: string; name: string; slug: string; logo_updated_at: Date | null }>(
-      `SELECT w.id, w.name, w.slug, w.logo_updated_at
-         FROM workspaces w JOIN users u ON u.workspace_id = w.id
-        WHERE lower(u.email) = lower($1) AND NOT u.is_bot AND u.account_status <> 'deactivated'
-        ORDER BY w.name
-        LIMIT 50`,
-      [email],
-    );
-    return rows.map((row) => ({ id: row.id, name: row.name, slug: row.slug, logoUrl: logoUrlOf(row.id, row.logo_updated_at) }));
   },
 
   /** Renames the workspace. Initials follow the name, since the switcher shows them. */

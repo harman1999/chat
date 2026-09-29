@@ -1,29 +1,23 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  ACCOUNTS,
-  asClient,
-  assertServerRunning,
-  BASE_URL,
-  closeDb,
-  db,
-  DEMO_PASSWORD,
-  sessionCookieOf,
-  signIn,
-  type Client,
-} from "./helpers";
+import { pool } from "@server/db/client";
+import { workspacesRepo } from "@server/repo/workspaces";
+import { ACCOUNTS, assertServerRunning, BASE_URL, closeDb, db, DEMO_PASSWORD, signIn, type Client } from "./helpers";
 
 /**
- * Creating, entering and switching workspaces — and, above all, that a second
- * workspace is sealed off from the first.
+ * The application has one fixed workspace, but the data model is still
+ * multi-tenant: an operator can provision another, and old ones exist. So the
+ * most important thing to keep proving is that a second workspace is sealed off
+ * from the first.
  *
- * The owner of a brand-new workspace is an administrator there, and every
+ * The second workspace is made the way an operator would, directly, since there
+ * is no screen or route for it. Its owner is an administrator there, and every
  * attack below is one an administrator of workspace B could try against
  * Northwind (A) with ids they can guess or read from their own screens.
  */
 describe("multiple workspaces", () => {
   let owner: Client; // Harman, in Northwind
   let member: Client; // Bob, in Northwind
-  let other: Client; // Harman's new account, owner of the test workspace
+  let other: Client; // Harman's other account, owner of the test workspace
   let otherId = "";
   let otherSlug = "";
   let otherGeneral = "";
@@ -39,69 +33,37 @@ describe("multiple workspaces", () => {
     await assertServerRunning();
     owner = await signIn(ACCOUNTS.owner);
     member = await signIn(ACCOUNTS.member);
+
+    const created = await workspacesRepo.create({ name: "Isolation Test Co", creatorId: owner.userId });
+    otherId = created.workspaceId;
+    otherSlug = created.slug;
+    other = await signIn(ACCOUNTS.owner, DEMO_PASSWORD, otherSlug);
+
+    const general = await db().query<{ id: string }>(
+      `SELECT id FROM channels WHERE workspace_id = $1 AND name = 'general'`,
+      [otherId],
+    );
+    otherGeneral = general.rows[0].id;
   });
 
   afterAll(async () => {
     // Everything the test workspace holds cascades from its row.
     if (otherId) await db().query(`DELETE FROM workspaces WHERE id = $1`, [otherId]);
+    await pool.end();
     await closeDb();
   });
 
-  describe("creating", () => {
-    it("is refused to a member", async () => {
-      const response = await member.fetch("/workspaces", {
-        method: "POST",
-        body: JSON.stringify({ name: "Bob's Co", password: DEMO_PASSWORD }),
-      });
-      expect(response.status).toBe(403);
-    });
-
-    it("asks for the creator's password", async () => {
-      const response = await owner.fetch("/workspaces", {
-        method: "POST",
-        body: JSON.stringify({ name: "Wrong Password Co", password: "not-it" }),
-      });
-      expect(response.status).toBe(403);
-      const made = await db().query(`SELECT 1 FROM workspaces WHERE name = 'Wrong Password Co'`);
-      expect(made.rowCount).toBe(0);
-    });
-
-    it("creates the workspace and moves the creator into it", async () => {
-      const creator = await signIn(ACCOUNTS.owner);
-      const response = await creator.fetch("/workspaces", {
-        method: "POST",
-        body: JSON.stringify({ name: "Isolation Test Co", password: DEMO_PASSWORD }),
-      });
-      expect(response.status).toBe(201);
-      const body = (await response.json()) as { workspaceId: string; slug: string };
-      otherId = body.workspaceId;
-      otherSlug = body.slug;
-      expect(otherSlug).toMatch(/^isolation-test-co/);
-
-      const me = await asClient(sessionCookieOf(response), "").fetch("/auth/me");
-      const user = (await me.json()) as { id: string; email: string };
-      other = asClient(sessionCookieOf(response), user.id);
-      expect(user.email).toBe(ACCOUNTS.owner);
-      expect(user.id).not.toBe("u_harman");
-
-      // The session it was created from ended.
-      expect((await creator.fetch("/auth/me")).status).toBe(401);
-
-      const general = await db().query<{ id: string }>(
-        `SELECT id FROM channels WHERE workspace_id = $1 AND name = 'general'`,
-        [otherId],
-      );
-      otherGeneral = general.rows[0].id;
-    });
-
-    it("gives it its own four built-in roles, with the creator as owner", async () => {
+  describe("a workspace provisioned by an operator", () => {
+    it("has its own four built-in roles, with its owner holding every permission it has", async () => {
       const roles = (await (await other.fetch("/admin/roles")).json()) as { id: string; kind: string | null }[];
       expect(roles.map((role) => role.kind).sort()).toEqual(["admin", "guest", "member", "owner"]);
       expect(roles.every((role) => !["role_owner", "role_member", "role_admin", "role_guest"].includes(role.id))).toBe(true);
 
       const permissions = (await (await other.fetch("/me/permissions")).json()) as string[];
-      expect(permissions).toContain("p_workspace_create");
       expect(permissions).toContain("p_admin_settings");
+      expect(permissions).toContain("p_team_manage");
+      // Retired: nothing creates workspaces from the interface any more.
+      expect(permissions).not.toContain("p_workspace_create");
     });
 
     it("starts with complete settings and nothing from Northwind", async () => {
@@ -116,15 +78,14 @@ describe("multiple workspaces", () => {
     });
   });
 
-  describe("signing in and switching", () => {
+  describe("signing in and the workspace list", () => {
     it("asks which workspace when the password matches several accounts", async () => {
       const response = await login({});
       expect(response.status).toBe(409);
       const body = (await response.json()) as { code: string; workspaces: { slug: string }[] };
       expect(body.code).toBe("choose_workspace");
-      expect(body.workspaces.map((workspace) => workspace.slug).sort()).toEqual(
-        ["northwind", otherSlug].sort(),
-      );
+      const slugs = body.workspaces.map((workspace) => workspace.slug);
+      expect(slugs).toEqual(expect.arrayContaining(["northwind", otherSlug]));
     });
 
     it("signs in to the one named", async () => {
@@ -134,45 +95,21 @@ describe("multiple workspaces", () => {
     });
 
     it("shows no choice to a wrong password", async () => {
-      const response = await login({ password: "wrong-password" });
-      expect(response.status).toBe(401);
+      expect((await login({ password: "wrong-password" })).status).toBe(401);
     });
 
-    it("lists both in the switcher, marking the current one", async () => {
-      const list = (await (await owner.fetch("/workspaces")).json()) as { id: string; isCurrent: boolean }[];
-      expect(list.find((workspace) => workspace.isCurrent)?.id).toBe("ws_northwind");
-      expect(list.some((workspace) => workspace.id === otherId && !workspace.isCurrent)).toBe(true);
+    it("lists only the workspace you are in", async () => {
+      for (const client of [owner, member, other]) {
+        const list = (await (await client.fetch("/workspaces")).json()) as { id: string }[];
+        expect(list).toHaveLength(1);
+      }
+      const list = (await (await other.fetch("/workspaces")).json()) as { id: string }[];
+      expect(list[0].id).toBe(otherId);
     });
 
-    it("never lists a workspace to someone without an account there", async () => {
-      const list = (await (await member.fetch("/workspaces")).json()) as { id: string }[];
-      expect(list.map((workspace) => workspace.id)).toEqual(["ws_northwind"]);
-    });
-
-    it("switches only with the other account's password, ending this session", async () => {
-      const client = await signIn(ACCOUNTS.owner);
-      const wrong = await client.fetch("/auth/switch", {
-        method: "POST",
-        body: JSON.stringify({ workspaceId: otherId, password: "not-it" }),
-      });
-      expect(wrong.status).toBe(403);
-
-      const right = await client.fetch("/auth/switch", {
-        method: "POST",
-        body: JSON.stringify({ workspaceId: otherId, password: DEMO_PASSWORD }),
-      });
-      expect(right.status).toBe(200);
-      expect((await client.fetch("/auth/me")).status).toBe(401);
-      const me = await asClient(sessionCookieOf(right), "").fetch("/auth/me");
-      expect(((await me.json()) as { id: string }).id).toBe(other.userId);
-    });
-
-    it("cannot switch into a workspace without an account there", async () => {
-      const response = await member.fetch("/auth/switch", {
-        method: "POST",
-        body: JSON.stringify({ workspaceId: otherId, password: DEMO_PASSWORD }),
-      });
-      expect(response.status).toBe(404);
+    it("has no way to switch or to create a workspace", async () => {
+      expect((await owner.fetch("/auth/switch", { method: "POST", body: JSON.stringify({ workspaceId: otherId }) })).status).toBe(404);
+      expect((await owner.fetch("/workspaces", { method: "POST", body: JSON.stringify({ name: "Nope" }) })).status).toBe(405);
     });
   });
 
@@ -404,6 +341,25 @@ describe("multiple workspaces", () => {
         method: "DELETE",
       });
       expect(response.status).toBe(403);
+    });
+  });
+
+  describe("an archived workspace", () => {
+    it("lets nobody in, not even with a session they already hold", async () => {
+      await db().query(`UPDATE workspaces SET archived_at = now() WHERE id = $1`, [otherId]);
+      try {
+        expect((await other.fetch("/auth/me")).status).toBe(401);
+        expect((await login({ workspace: otherSlug })).status).toBe(401);
+
+        // …and it no longer appears as a choice at sign-in.
+        const response = await login({});
+        expect(response.status).toBe(200);
+        expect(((await response.json()) as { user: { id: string } }).user.id).toBe(owner.userId);
+      } finally {
+        await db().query(`UPDATE workspaces SET archived_at = NULL WHERE id = $1`, [otherId]);
+      }
+      // Put away is not deleted: it comes back exactly as it was.
+      expect((await other.fetch("/auth/me")).status).toBe(200);
     });
   });
 });

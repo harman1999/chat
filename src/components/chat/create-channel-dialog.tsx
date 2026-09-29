@@ -16,7 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControl } from "@/components/settings";
+import { usePermission, useTeams } from "@/hooks";
 import { channelService } from "@/services";
+import { isApiError } from "@/services/http";
 import { useWorkspaceStore } from "@/store";
 
 /** Mirrors the server's channel-name grammar so the error appears before submit. */
@@ -35,8 +37,15 @@ export function CreateChannelDialog({
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [kind, setKind] = useState<"public" | "private">("public");
+  const [teamId, setTeamId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Putting a channel in a team is a team decision, so only people who manage
+  // teams are offered it — and only once there is a team to choose.
+  const canManageTeams = usePermission("p_team_manage");
+  const { data: teams } = useTeams();
+  const showTeams = canManageTeams && (teams?.length ?? 0) > 0;
 
   const trimmed = name.trim().toLowerCase();
   const nameError = trimmed.length > 0 && !NAME_PATTERN.test(trimmed)
@@ -48,6 +57,7 @@ export function CreateChannelDialog({
     setName("");
     setPurpose("");
     setKind("public");
+    setTeamId("");
     setError(null);
   };
 
@@ -58,15 +68,16 @@ export function CreateChannelDialog({
     setIsSaving(true);
     setError(null);
     try {
-      const channel = await channelService.create({ name: trimmed, purpose, kind });
+      const channel = await channelService.create({ name: trimmed, purpose, kind, teamId: teamId || undefined });
       await queryClient.invalidateQueries({ queryKey: ["channels"] });
+      if (teamId) await queryClient.invalidateQueries({ queryKey: ["teams"] });
       if (channel) setActiveConversation(channel.id);
       toast.success("Channel created", { description: `#${trimmed}` });
       onOpenChange(false);
       reset();
-    } catch {
-      // The server owns uniqueness; surface its refusal rather than guessing.
-      setError(`Could not create #${trimmed}. The name may already be taken.`);
+    } catch (caught) {
+      // The server owns uniqueness and permission; say what it said.
+      setError(isApiError(caught) ? caught.message : `Could not create #${trimmed}. Try again.`);
     } finally {
       setIsSaving(false);
     }
@@ -138,6 +149,30 @@ export function CreateChannelDialog({
                   : "Only people who are invited can see this channel."}
               </p>
             </div>
+
+            {showTeams && (
+              <div className="space-y-1.5">
+                <Label htmlFor="channel-team">Team (optional)</Label>
+                <select
+                  id="channel-team"
+                  value={teamId}
+                  onChange={(event) => setTeamId(event.target.value)}
+                  className="h-8 w-full rounded-md border border-border bg-surface px-2 text-sm text-fg shadow-xs hover:border-border-strong focus-visible:border-accent"
+                >
+                  <option value="">No team</option>
+                  {teams?.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-2xs text-fg-subtle">
+                  {teamId
+                    ? "Everyone in the team is added to this channel, and new people who join the team are added too."
+                    : "Choose a team to add all of its people at once."}
+                </p>
+              </div>
+            )}
 
             {error && (
               <p role="alert" className="rounded-md bg-danger-subtle px-2.5 py-2 text-xs text-danger">

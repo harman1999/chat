@@ -26,6 +26,7 @@ const channel: Channel = {
   lastMessageAt: null,
   createdBy: me.id,
   createdAt: new Date().toISOString(),
+  teamId: null,
 };
 
 /**

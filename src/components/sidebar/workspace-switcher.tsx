@@ -1,17 +1,15 @@
 "use client";
 
-import { Check, ChevronsUpDown, LogOut, Plus, Settings2, ShieldCheck, UserPlus } from "lucide-react";
+import { ChevronsUpDown, LogOut, Settings2, ShieldCheck, UserPlus, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 import { AppLogoMark, WorkspaceLogo } from "@/components/common";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCanAdminister, usePermission } from "@/hooks";
@@ -23,7 +21,6 @@ import { formatMembers } from "@/lib/format";
 import { useWorkspaceStore } from "@/store";
 import type { Workspace } from "@/types";
 import { InvitePeopleDialog } from "./invite-people-dialog";
-import { CreateWorkspaceDialog, SwitchWorkspaceDialog } from "./workspace-access-dialogs";
 
 const PLAN_LABEL: Record<Workspace["plan"], string> = {
   free: "Free",
@@ -48,15 +45,9 @@ export function WorkspaceSwitcher({
   const onTopbar = variant === "topbar";
   const router = useRouter();
   const workspaceId = useWorkspaceStore((state) => state.workspaceId);
-  // The session's workspace. Others listed are separate accounts.
-  const active =
-    workspaces.find((workspace) => workspace.isCurrent) ??
-    workspaces.find((workspace) => workspace.id === workspaceId) ??
-    workspaces[0];
-  const canCreate = usePermission("p_workspace_create");
+  const active = workspaces.find((workspace) => workspace.id === workspaceId) ?? workspaces[0];
+  const canManageTeams = usePermission("p_team_manage");
   const canAdminister = useCanAdminister();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [switchTarget, setSwitchTarget] = useState<Workspace | null>(null);
   // Only offered to people who can actually invite, rather than shown to
   // everyone and refused on click.
   const canInvite = usePermission("p_user_invite");
@@ -130,54 +121,27 @@ export function WorkspaceSwitcher({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" className="w-72" sideOffset={4}>
-        <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
-        {workspaces.map((workspace) => {
-          const isActive = workspace.id === active.id;
-          return (
-            <DropdownMenuItem
-              key={workspace.id}
-              onSelect={() => {
-                if (!isActive) setSwitchTarget(workspace);
-              }}
-              className="gap-2.5 py-2"
-            >
-              <WorkspaceLogo
-                logoUrl={workspace.logoUrl}
-                name={workspace.name}
-                fallback={
-                  <span
-                    className={cn(
-                      "grid size-7 shrink-0 place-items-center rounded-md text-2xs font-bold",
-                      isActive ? "bg-accent text-accent-fg" : "bg-surface-active text-fg-muted",
-                    )}
-                    aria-hidden
-                  >
-                    {workspace.initials}
-                  </span>
-                }
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{workspace.name}</span>
-                <span className="block truncate text-2xs text-fg-subtle">
-                  {formatMembers(workspace.memberCount)} · {PLAN_LABEL[workspace.plan]}
-                </span>
+        {/* One fixed workspace: shown as the header of the menu, not as a list to pick from. */}
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          <WorkspaceLogo
+            logoUrl={active.logoUrl}
+            name={active.name}
+            fallback={
+              <span
+                className="grid size-7 shrink-0 place-items-center rounded-md bg-accent text-2xs font-bold text-accent-fg"
+                aria-hidden
+              >
+                {active.initials}
               </span>
-              {workspace.mentionCount > 0 && !isActive && (
-                <Badge variant="accent" size="sm" className="tabular-nums">
-                  {workspace.mentionCount}
-                </Badge>
-              )}
-              {isActive && <Check className="size-4 shrink-0 !text-accent" />}
-            </DropdownMenuItem>
-          );
-        })}
-
-        {canCreate && (
-          <DropdownMenuItem onSelect={() => setIsCreateOpen(true)}>
-            <Plus />
-            Create a workspace
-          </DropdownMenuItem>
-        )}
+            }
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-fg">{active.name}</span>
+            <span className="block truncate text-2xs text-fg-subtle">
+              {formatMembers(active.memberCount)} · {PLAN_LABEL[active.plan]}
+            </span>
+          </span>
+        </div>
 
         {canInvite && (
           <>
@@ -194,6 +158,12 @@ export function WorkspaceSwitcher({
           <Settings2 />
           Workspace settings
         </DropdownMenuItem>
+        {canManageTeams && (
+          <DropdownMenuItem onSelect={() => router.push("/admin/teams")}>
+            <UsersRound />
+            Teams
+          </DropdownMenuItem>
+        )}
         {canAdminister && (
           <DropdownMenuItem onSelect={() => router.push("/admin")}>
             <ShieldCheck />
@@ -218,8 +188,6 @@ export function WorkspaceSwitcher({
         onOpenChange={setIsInviteOpen}
         workspaceName={active.name}
       />
-      <CreateWorkspaceDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
-      <SwitchWorkspaceDialog target={switchTarget} onClose={() => setSwitchTarget(null)} />
     </>
   );
 }

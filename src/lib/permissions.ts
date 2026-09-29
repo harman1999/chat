@@ -14,4 +14,5 @@ export const ADMIN_PERMISSIONS = [
   "p_admin_billing",
   "p_user_manage_roles",
   "p_user_deactivate",
+  "p_team_manage",
 ] as const;

@@ -127,8 +127,9 @@ fixed workspace. The owner asked for more than one, and chose the rules:
 - **Accounts are separate per workspace, not one login shared across them.**
   Creating a workspace gives the creator a new account there, starting with
   the same email and password. From then on the two are independent.
-  Switching asks for the other account's password and ends the current
-  session. A sign-in whose password matches several accounts asks which
+  Switching ends the current session and starts one in the other account: it
+  asks for that account's password the first time, and not again once the two
+  are linked (see the addendum below). A sign-in whose password matches several accounts asks which
   workspace to enter.
 
 Making a second workspace reachable turned up twenty cross-workspace gaps,
@@ -172,4 +173,23 @@ what is true:
   sync*, and the SCIM endpoint. Nothing behind them existed — the provider
   toggle endpoint was a documented no-op that answered success. If single
   sign-on is built, its controls arrive with it.
+
+## Addendum — switching workspace without a password
+
+Asking for a password on every switch was too much, and dropping it entirely was
+not safe: the accounts share only an email, and an email proves nothing here
+because an administrator can create an account with anyone's address. The rule
+is that a switch needs no password when the two accounts are **linked** — the
+same person has already proved they own both, by creating one from the other or
+by switching with a password once. An administrator resetting a password cuts
+that account's link. See the handover, §5.22.
+
+## Addendum — teams replace workspaces
+
+Creating and switching between workspaces was built and then retired at the
+owner's request. The workspace is fixed; groups of people inside it are **teams**,
+each with its own people and channels, managed by owners and administrators.
+Nothing that let one person move between separate accounts remains, so the
+"switch without a password" question (see the addendum above) no longer arises.
+The one workspace created by the retired feature is archived, not deleted.
 

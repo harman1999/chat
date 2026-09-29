@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { ListSkeleton } from "@/components/common";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useTeams } from "@/hooks";
+import { ALL_TEAMS, NO_TEAM, sectionChannels } from "@/lib/team-filter";
 import { channelService, workspaceService } from "@/services";
 import { useUIStore, useWorkspaceStore } from "@/store";
 import { cn } from "@/lib/utils";
@@ -11,6 +13,7 @@ import { ChannelItem } from "./channel-item";
 import { DirectMessageItem } from "./dm-item";
 import { SidebarGroup } from "./sidebar-group";
 import { SidebarNav } from "./sidebar-nav";
+import { TeamFilter } from "./team-filter";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
@@ -31,6 +34,8 @@ export function WorkspaceSidebar({
 }) {
   const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const collapsedGroups = useWorkspaceStore((state) => state.collapsedGroups);
+  const teamFilter = useWorkspaceStore((state) => state.teamFilter);
+  const setTeamFilter = useWorkspaceStore((state) => state.setTeamFilter);
   const toggleGroup = useWorkspaceStore((state) => state.toggleGroup);
   const openCreateChannel = useUIStore((state) => state.setCreateChannelOpen);
   const openNewDirectMessage = useUIStore((state) => state.setNewDirectMessageOpen);
@@ -51,6 +56,13 @@ export function WorkspaceSidebar({
     queryFn: () => channelService.listDirectMessages(workspaceId),
   });
 
+  // Channels that belong to a team sit under that team's name, so what a team
+  // is working on is together; the rest stay under Channels. The team filter
+  // narrows this to one team. The narrow rail has no room to show a picker, so
+  // it always shows everything rather than filter by a choice you cannot see.
+  const teamsQuery = useTeams();
+  const sections = sectionChannels(channelsQuery.data ?? [], teamsQuery.data ?? [], isCollapsed ? "all" : teamFilter);
+  const showTeamFilter = !isCollapsed && sections.options.length > 0;
   return (
     <div
       className={cn(
@@ -86,35 +98,72 @@ export function WorkspaceSidebar({
 
         <div className="h-3" />
 
-        <SidebarGroup
-          id="channels"
-          title="Channels"
-          isCollapsed={isCollapsed}
-          isOpen={!collapsedGroups.channels}
-          onToggle={() => toggleGroup("channels")}
-          onAdd={() => openCreateChannel(true)}
-          addLabel="Create a channel"
-        >
-          {channelsQuery.isPending ? (
-            <ListSkeleton rows={6} />
-          ) : (
-            <>
-              {channelsQuery.data?.map((channel) => (
+        {showTeamFilter && (
+          <>
+            <TeamFilter
+              teams={sections.options}
+              value={sections.filter}
+              onChange={setTeamFilter}
+              hidden={sections.hidden}
+              badges={sections.badges}
+            />
+            <div className="h-2" />
+          </>
+        )}
+
+        {/* Channels without a team. Hidden while one team is chosen: they are not that team's. */}
+        {(sections.filter === ALL_TEAMS || sections.filter === NO_TEAM) && (
+          <SidebarGroup
+            id="channels"
+            title="Channels"
+            isCollapsed={isCollapsed}
+            isOpen={!collapsedGroups.channels}
+            onToggle={() => toggleGroup("channels")}
+            onAdd={() => openCreateChannel(true)}
+            addLabel="Create a channel"
+          >
+            {channelsQuery.isPending ? (
+              <ListSkeleton rows={6} />
+            ) : (
+              <>
+                {sections.loose.map((channel) => (
+                  <ChannelItem key={channel.id} channel={channel} isCollapsed={isCollapsed} />
+                ))}
+                {!isCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => openCreateChannel(true)}
+                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-subtle transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg focus-sidebar"
+                  >
+                    <Plus className="size-4 shrink-0" aria-hidden />
+                    <span className="truncate">Add channels</span>
+                  </button>
+                )}
+              </>
+            )}
+          </SidebarGroup>
+        )}
+
+
+        {sections.teams.map(({ team, channels }) => (
+          <div key={team.id}>
+            <div className="h-3" />
+            <SidebarGroup
+              id={`team-${team.id}`}
+              title={team.name}
+              isCollapsed={isCollapsed}
+              isOpen={!collapsedGroups[`team-${team.id}`]}
+              onToggle={() => toggleGroup(`team-${team.id}`)}
+            >
+              {channels.map((channel) => (
                 <ChannelItem key={channel.id} channel={channel} isCollapsed={isCollapsed} />
               ))}
-              {!isCollapsed && (
-                <button
-                  type="button"
-                  onClick={() => openCreateChannel(true)}
-                  className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-subtle transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg focus-sidebar"
-                >
-                  <Plus className="size-4 shrink-0" aria-hidden />
-                  <span className="truncate">Add channels</span>
-                </button>
+              {channels.length === 0 && !isCollapsed && (
+                <p className="px-2 py-1.5 text-xs text-sidebar-subtle">No channels in {team.name} yet.</p>
               )}
-            </>
-          )}
-        </SidebarGroup>
+            </SidebarGroup>
+          </div>
+        ))}
 
         <div className="h-3" />
 

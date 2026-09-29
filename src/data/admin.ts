@@ -37,7 +37,7 @@ export const permissions: Permission[] = [
   { id: "p_admin_settings", group: "Administration", label: "Manage workspace settings", description: "Change org-wide configuration." },
   { id: "p_admin_auth", group: "Administration", label: "Manage authentication", description: "Configure SSO, SCIM and password policy." },
   { id: "p_admin_audit", group: "Administration", label: "View audit logs", description: "Read the workspace audit trail." },
-  { id: "p_workspace_create", group: "Administration", label: "Create workspaces", description: "Start a new, separate workspace and become its owner." },
+  { id: "p_team_manage", group: "People", label: "Manage teams", description: "Create teams, and add or remove their people and channels." },
   { id: "p_admin_billing", group: "Administration", label: "Manage billing", description: "Change the plan and payment details." },
 ];
 

@@ -7,6 +7,8 @@ export { inviteService } from "./inviteService";
 export { messageService } from "./messageService";
 export { notificationService } from "./notificationService";
 export { searchService } from "./searchService";
+export { teamService } from "./teamService";
+export type { TeamChannel } from "./teamService";
 export { threadService } from "./threadService";
 export type { ThreadInboxEntry } from "./threadService";
 export { userService } from "./userService";

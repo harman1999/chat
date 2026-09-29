@@ -99,6 +99,7 @@ export function useRealtimeBridge() {
       realtimeClient.on("channel.membership", () => {
         void queryClient.invalidateQueries({ queryKey: ["channels"] });
         void queryClient.invalidateQueries({ queryKey: ["dms"] });
+        void queryClient.invalidateQueries({ queryKey: ["teams"] });
       }),
     ];
 

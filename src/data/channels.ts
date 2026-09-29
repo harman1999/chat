@@ -25,6 +25,7 @@ export const channels: Channel[] = [
     lastMessageAt: hoursAgo(1),
     createdAt: daysAgo(720),
     createdBy: "u_harman",
+    teamId: null,
   },
   {
     id: "ch_devops",
@@ -45,6 +46,7 @@ export const channels: Channel[] = [
     lastMessageAt: hoursAgo(0.3),
     createdAt: daysAgo(540),
     createdBy: "u_alice",
+    teamId: null,
   },
   {
     id: "ch_backend",
@@ -64,6 +66,7 @@ export const channels: Channel[] = [
     lastMessageAt: hoursAgo(2),
     createdAt: daysAgo(500),
     createdBy: "u_bob",
+    teamId: null,
   },
   {
     id: "ch_frontend",
@@ -83,6 +86,7 @@ export const channels: Channel[] = [
     lastMessageAt: hoursAgo(4),
     createdAt: daysAgo(460),
     createdBy: "u_david",
+    teamId: null,
   },
   {
     id: "ch_support",
@@ -102,6 +106,7 @@ export const channels: Channel[] = [
     lastMessageAt: hoursAgo(0.8),
     createdAt: daysAgo(300),
     createdBy: "u_tomas",
+    teamId: null,
   },
   {
     id: "ch_random",
@@ -121,6 +126,7 @@ export const channels: Channel[] = [
     lastMessageAt: hoursAgo(3),
     createdAt: daysAgo(700),
     createdBy: "u_lena",
+    teamId: null,
   },
 ];
 
@@ -144,6 +150,7 @@ export const directMessages: Channel[] = [
     lastMessageAt: hoursAgo(0.2),
     createdAt: daysAgo(200),
     createdBy: "u_harman",
+    teamId: null,
   },
   {
     id: "dm_bob",
@@ -164,6 +171,7 @@ export const directMessages: Channel[] = [
     lastMessageAt: hoursAgo(5),
     createdAt: daysAgo(180),
     createdBy: "u_bob",
+    teamId: null,
   },
   {
     id: "dm_sarah",
@@ -184,6 +192,7 @@ export const directMessages: Channel[] = [
     lastMessageAt: hoursAgo(1.5),
     createdAt: daysAgo(150),
     createdBy: "u_sarah",
+    teamId: null,
   },
   {
     id: "dm_david",
@@ -204,6 +213,7 @@ export const directMessages: Channel[] = [
     lastMessageAt: daysAgo(1),
     createdAt: daysAgo(120),
     createdBy: "u_harman",
+    teamId: null,
   },
   {
     id: "dm_ops_group",
@@ -224,6 +234,7 @@ export const directMessages: Channel[] = [
     lastMessageAt: daysAgo(2),
     createdAt: daysAgo(90),
     createdBy: "u_priya",
+    teamId: null,
   },
 ];
 

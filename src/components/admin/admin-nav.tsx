@@ -11,6 +11,7 @@ import {
   Server,
   ShieldCheck,
   Users,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,6 +26,7 @@ export const ADMIN_SECTIONS: {
 }[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, group: "Overview" },
   { href: "/admin/users", label: "Users", icon: Users, group: "People" },
+  { href: "/admin/teams", label: "Teams", icon: UsersRound, group: "People" },
   { href: "/admin/roles", label: "Roles", icon: ShieldCheck, group: "People" },
   { href: "/admin/permissions", label: "Permissions", icon: KeyRound, group: "People" },
   { href: "/admin/channels", label: "Channels", icon: Hash, group: "Workspace" },

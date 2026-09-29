@@ -14,4 +14,5 @@ export { StatTile } from "./stat-tile";
 export { StorageAdmin } from "./storage-admin";
 export { SystemAdmin } from "./system-admin";
 export { TrendChart } from "./trend-chart";
+export { TeamsAdmin } from "./teams-admin";
 export { UsersAdmin } from "./users-admin";

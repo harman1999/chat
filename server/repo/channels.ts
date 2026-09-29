@@ -15,6 +15,7 @@ interface ChannelRow {
   last_message_at: Date | null;
   created_by: string | null;
   created_at: Date;
+  team_id: string | null;
   is_muted: boolean | null;
   is_favorite: boolean | null;
   unread_count: string | null;
@@ -31,7 +32,7 @@ interface ChannelRow {
  */
 const CHANNEL_SELECT = `
   SELECT c.id, c.kind, c.name, c.purpose, c.description, c.topic,
-         c.member_count, c.is_archived, c.last_message_at, c.created_by, c.created_at,
+         c.member_count, c.is_archived, c.last_message_at, c.created_by, c.created_at, c.team_id,
          cm.is_muted, cm.is_favorite,
          (SELECT count(*) FROM messages m
             WHERE m.channel_id = c.id AND m.thread_root_id IS NULL
@@ -81,6 +82,7 @@ function mapChannel(row: ChannelRow, workspaceId: string): Channel {
     lastMessageAt: row.last_message_at?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
     createdBy: row.created_by ?? "",
+    teamId: row.team_id,
   };
 }
 
@@ -232,14 +234,16 @@ export const channelsRepo = {
     name: string;
     purpose: string;
     createdBy: string;
+    /** A team of this workspace, whose members are all added (see teamsRepo). */
+    teamId?: string | null;
   }): Promise<Channel | null> {
     const id = `ch_${randomUUID()}`;
 
     await transaction(async (client) => {
       await client.query(
-        `INSERT INTO channels (id, workspace_id, kind, name, purpose, description, member_count, created_by)
-         VALUES ($1,$2,$3,$4,$5,$5,1,$6)`,
-        [id, input.workspaceId, input.kind, input.name, input.purpose, input.createdBy],
+        `INSERT INTO channels (id, workspace_id, kind, name, purpose, description, member_count, created_by, team_id)
+         VALUES ($1,$2,$3,$4,$5,$5,1,$6,$7)`,
+        [id, input.workspaceId, input.kind, input.name, input.purpose, input.createdBy, input.teamId ?? null],
       );
       await client.query(
         `INSERT INTO channel_members (channel_id, user_id, last_read_at) VALUES ($1,$2,now())`,

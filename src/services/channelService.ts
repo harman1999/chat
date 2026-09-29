@@ -47,6 +47,8 @@ export const channelService = {
     purpose?: string;
     kind?: "public" | "private";
     memberIds?: ID[];
+    /** Create it inside a team, whose people are all added. Team managers only. */
+    teamId?: ID;
   }): Promise<Channel | null> {
     if (USE_MOCK_TRANSPORT) return mockResolve(null, 240);
     return request<Channel>("/channels", { method: "POST", body: input });
