@@ -19,6 +19,7 @@ const contentStyles =
 export function DropdownMenuContent({
   className,
   sideOffset = 6,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -26,6 +27,15 @@ export function DropdownMenuContent({
       <DropdownMenuPrimitive.Content
         sideOffset={sideOffset}
         className={cn(contentStyles, className)}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          // A menu item that opens a dialog closes the menu, which by default
+          // hands focus back to the menu's button — pulling it out of the
+          // dialog just as it took it. That defeats a confirmation whose
+          // safe answer has focus, so Enter would open the menu again instead
+          // of answering. When a dialog is open, leave focus where it is.
+          if (document.querySelector('[role="dialog"], [role="alertdialog"]')) event.preventDefault();
+        }}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>

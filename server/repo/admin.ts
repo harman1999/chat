@@ -125,6 +125,46 @@ export const adminRepo = {
     return rows.length > 0;
   },
 
+  /**
+   * Sets a temporary password for someone in this workspace.
+   *
+   * Who may reset whom is decided here, not left to the caller: resetting a
+   * password is signing in as that person, so an administrator must not be able
+   * to take over an owner. Rank is owner > admin > everyone else; you need a
+   * higher rank than the person you reset, except that an owner may reset
+   * another owner (someone has to when the other forgot theirs). Nobody resets
+   * themselves here — that is Settings, which asks for the current password.
+   */
+  async resetPassword(input: {
+    workspaceId: string;
+    actorId: string;
+    targetId: string;
+    passwordHash: string;
+  }): Promise<
+    | { ok: true; userId: string; username: string }
+    | { ok: false; reason: "not_found" | "self" | "bot" | "outranked" }
+  > {
+    const rows = await query<{ id: string; username: string; is_bot: boolean; kind: string | null }>(
+      `SELECT u.id, u.username, u.is_bot, r.kind
+         FROM users u LEFT JOIN roles r ON r.id = u.role_id AND r.workspace_id = u.workspace_id
+        WHERE u.workspace_id = $1 AND u.id = ANY($2::text[])`,
+      [input.workspaceId, [input.actorId, input.targetId]],
+    );
+    const target = rows.find((row) => row.id === input.targetId);
+    const actor = rows.find((row) => row.id === input.actorId);
+    if (!target || !actor) return { ok: false, reason: "not_found" };
+    if (input.actorId === input.targetId) return { ok: false, reason: "self" };
+    // A bot signs in with a token, not a password.
+    if (target.is_bot) return { ok: false, reason: "bot" };
+
+    const rank = (kind: string | null) => (kind === "owner" ? 3 : kind === "admin" ? 2 : 1);
+    const allowed = actor.kind === "owner" || rank(actor.kind) > rank(target.kind);
+    if (!allowed) return { ok: false, reason: "outranked" };
+
+    await query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [target.id, input.passwordHash]);
+    return { ok: true, userId: target.id, username: target.username };
+  },
+
   /** Within one workspace only; false when the person is not in it. */
   async setUserStatus(workspaceId: string, userId: string, status: AdminUser["status"]): Promise<boolean> {
     const rows = await query<{ id: string }>(

@@ -78,6 +78,13 @@ export async function signInAs(userId: string, request: Request, replacing?: str
   return sessionId;
 }
 
+/** Ends every session a person has, on every device. */
+export async function revokeAllSessions(userId: string): Promise<number> {
+  const revoked = await query<{ id: string }>(`DELETE FROM sessions WHERE user_id = $1 RETURNING id`, [userId]);
+  if (revoked.length) await redis.del(...revoked.map((session) => sessionKey(session.id)));
+  return revoked.length;
+}
+
 export async function destroySession(sessionId: string): Promise<void> {
   await redis.del(sessionKey(sessionId));
   await query(`DELETE FROM sessions WHERE id = $1`, [sessionId]);

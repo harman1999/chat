@@ -130,6 +130,7 @@ export function SystemAdmin() {
   const [draftDomain, setDraftDomain] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
 
   if (isPending || !data) {
     return (
@@ -150,6 +151,45 @@ export function SystemAdmin() {
 
   const domainList = domains ?? data.signupDomains;
   const nameIsBlank = String(value("workspaceName", data.workspaceName)).trim() === "";
+
+  /**
+   * Setting a retention deletes old messages for good, within the hour. So
+   * before saving one, say how many are affected now and ask.
+   */
+  const reviewAndSave = async () => {
+    const days = form.messageRetentionDays;
+    if (typeof days !== "number" || days === 0) return save();
+
+    setIsSaving(true);
+    let count: number;
+    try {
+      count = (await adminService.retentionPreview(days)).messages;
+    } catch (error) {
+      toast.error("Could not check what would be deleted", {
+        description: isApiError(error) ? error.message : undefined,
+      });
+      return;
+    } finally {
+      setIsSaving(false);
+    }
+    if (count === 0) return save();
+
+    setConfirm({
+      title: `Delete messages older than ${days} days?`,
+      destructive: true,
+      confirmLabel: "Yes, delete them",
+      cancelLabel: "No",
+      description: (
+        <>
+          <strong>{count.toLocaleString()}</strong> {count === 1 ? "message is" : "messages are"} older
+          than {days} days, in channels and direct messages alike. They and their reactions and
+          attachments will be <strong>permanently deleted within the hour</strong>, and from then on
+          each day&apos;s oldest messages go the same way. This cannot be undone.
+        </>
+      ),
+      onConfirm: save,
+    });
+  };
 
   const save = async () => {
     setIsSaving(true);
@@ -188,13 +228,14 @@ export function SystemAdmin() {
           variant="primary"
           size="sm"
           disabled={!isDirty || isSaving || nameIsBlank}
-          onClick={() => void save()}
+          onClick={() => void reviewAndSave()}
         >
           {isSaving && <Loader2 className="animate-spin" />}
           Save changes
         </Button>
       }
     >
+      <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
       <div className="space-y-8">
         <SettingSection title="Workspace" description="How this workspace identifies itself.">
           <SettingRow label="Name" htmlFor="sys-name">

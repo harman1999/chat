@@ -80,6 +80,12 @@ export const adminService = {
     return request<AdminUser>("/admin/users", { method: "POST", body: input });
   },
 
+  /** Sets a temporary password and ends their sessions. The password is returned once. */
+  async resetPassword(userId: ID): Promise<{ password: string; username: string }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ password: "mock-temporary-pw", username: "mock" }, 300);
+    return request<{ password: string; username: string }>(`/admin/users/${userId}/password`, { method: "POST" });
+  },
+
   async setUserStatus(userId: ID, status: AdminUser["status"]): Promise<void> {
     if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 260);
     return request<void>(`/admin/users/${userId}/status`, { method: "PUT", body: { status } });
@@ -286,6 +292,12 @@ export const adminService = {
   async updateSettings(patch: Partial<SystemSettings>): Promise<void> {
     if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 300);
     return request<void>("/admin/settings", { method: "PATCH", body: patch });
+  },
+
+  /** How many messages a retention of this many days would delete right now. */
+  async retentionPreview(days: number): Promise<{ days: number; messages: number }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ days, messages: 0 }, 200);
+    return request<{ days: number; messages: number }>(`/admin/retention?days=${days}`);
   },
 
   /** Replaces the workspace logo with this image. Resolves to its new URL. */

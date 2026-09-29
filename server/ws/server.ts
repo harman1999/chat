@@ -10,6 +10,7 @@ import { createServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { env } from "../env";
 import { query, queryOne } from "../db/client";
+import { startRetentionJob } from "../jobs/retention";
 import { createSubscriber, presenceKey, redis, REALTIME_CHANNEL, sessionKey } from "../lib/redis";
 
 interface Client {
@@ -230,8 +231,13 @@ async function main() {
     console.log(`[ws] listening on :${env.wsPort}`);
   });
 
+  // The only long-running process besides the web server, so scheduled work
+  // lives here rather than in a separate one nobody would remember to start.
+  const stopJobs = startRetentionJob();
+
   const shutdown = async () => {
     clearInterval(heartbeat);
+    stopJobs();
     wss.close();
     httpServer.close();
     await subscriber.quit();

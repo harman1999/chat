@@ -146,7 +146,14 @@ export const systemSettingsSchema = z
     allowPublicInvites: z.boolean(),
     restrictSignupDomain: z.boolean(),
     signupDomains: z.array(z.string().trim().min(1).max(253)).max(50),
-    messageRetentionDays: z.number().int().min(0).max(36_500).nullable(),
+    // Deleting is permanent, so nothing shorter than 30 days can be set: null or
+    // 0 keeps everything, and a typo like 1 must not wipe a workspace.
+    messageRetentionDays: z
+      .number()
+      .int()
+      .max(36_500)
+      .refine((days) => days === 0 || days >= 30, "Use 0 to keep forever, or at least 30 days")
+      .nullable(),
     fileRetentionDays: z.number().int().min(0).max(36_500).nullable(),
     maxUploadMb: z.number().int().min(1).max(5_000),
     requireTwoFactor: z.boolean(),

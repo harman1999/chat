@@ -134,3 +134,17 @@ fixed workspace. The owner asked for more than one, and chose the rules:
 Making a second workspace reachable turned up twenty cross-workspace gaps,
 all fixed and each tested. They had never mattered, because nobody had ever
 been outside Northwind.
+
+## Addendum — password reset and retention
+
+"Send password reset" was deferred because it needs email. An administrator
+can now reset a password, and that is the answer for a system with no mail
+transport: the reset produces a temporary password shown once, for the
+administrator to pass on, and ends the person's sessions. It is not a reset
+*link*, and the interface does not pretend to send anything. Who may reset whom
+is enforced on the server (an administrator cannot reset an owner).
+
+The "Message retention" control used to save a value nothing acted on, which
+made it a control that lied. It now deletes, permanently, and asks first —
+showing how many messages are due. `fileRetentionDays` has no control and is not
+enforced.
