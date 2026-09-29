@@ -1,4 +1,3 @@
-import { env } from "@server/env";
 import { handler, json, parseBody, problem } from "@server/lib/http";
 import { consume, LOGIN_ACCOUNT_RULE, LOGIN_IP_RULE, penalise, reset } from "@server/lib/rate-limit";
 import { signInAs } from "@server/lib/session";
@@ -81,11 +80,11 @@ export const POST = handler(async (request: Request) => {
   }
 
   const [row] = active;
-  const sessionId = await signInAs(row.id, request);
+  const { sessionId, expiresAt } = await signInAs(row.id, request);
   return json({
     user: mapUser(row),
     accessToken: sessionId,
-    expiresAt: new Date(Date.now() + env.sessionTtlSeconds * 1000).toISOString(),
+    expiresAt: expiresAt.toISOString(),
   });
 }, { rateLimit: LOGIN_IP_RULE });
 

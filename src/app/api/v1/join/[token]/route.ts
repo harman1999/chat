@@ -1,10 +1,8 @@
-import { cookies } from "next/headers";
-import { env } from "@server/env";
 import { handler, json, parseBody, problem } from "@server/lib/http";
 import { audit } from "@server/lib/audit";
 import type { RateLimitRule } from "@server/lib/rate-limit";
 import { acceptInviteSchema } from "@server/lib/schemas";
-import { createSession } from "@server/lib/session";
+import { signInAs } from "@server/lib/session";
 import { invitesRepo, type InviteProblem } from "@server/repo/invites";
 
 /**
@@ -50,15 +48,7 @@ export const POST = handler(
 
     // Signed straight in: joining and then being asked to sign in again with
     // the password just chosen is a step with no purpose.
-    const sessionId = await createSession(result.userId, request);
-    const store = await cookies();
-    store.set(env.sessionCookie, sessionId, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: env.sessionTtlSeconds,
-    });
+    await signInAs(result.userId, request);
 
     await audit({
       actorId: result.userId,

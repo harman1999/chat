@@ -25,11 +25,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-[100dvh] flex-col bg-canvas">
       <header className="sticky top-0 z-10 flex h-[var(--spacing-topbar)] shrink-0 items-center gap-2 border-b border-border bg-surface px-3 sm:px-4">
-        <WorkspaceLogo
-          logoUrl={workspace?.logoUrl ?? null}
-          name={workspace?.name ?? ""}
-          fallback={<AppLogoMark />}
-        />
+        {/* The logo is the way home, as it is everywhere else. */}
+        <Link href="/workspace" aria-label="Back to the chat" title="Back to the chat" className="shrink-0 rounded-md transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          <WorkspaceLogo
+            logoUrl={workspace?.logoUrl ?? null}
+            name={workspace?.name ?? ""}
+            fallback={<AppLogoMark />}
+          />
+        </Link>
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 truncate text-sm font-semibold tracking-tight text-fg">
             Administration

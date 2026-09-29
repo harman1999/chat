@@ -1,7 +1,6 @@
 import type {
   AdminUser,
   AuditLogEntry,
-  AuthProvider,
   Channel,
   DailyMetric,
   ID,
@@ -19,7 +18,6 @@ import type {
   SystemSettings,
   WorkspaceStats,
 } from "@/types";
-import { authProviders } from "@/config";
 import {
   adminUsers,
   auditLog,
@@ -267,16 +265,6 @@ export const adminService = {
     return request<void>(`/admin/roles/${roleId}/permissions/${permissionId}`, {
       method: granted ? "PUT" : "DELETE",
     });
-  },
-
-  async listAuthProviders(): Promise<AuthProvider[]> {
-    if (USE_MOCK_TRANSPORT) return mockResolve(authProviders, 220);
-    return request<AuthProvider[]>("/admin/auth/providers");
-  },
-
-  async setAuthProviderEnabled(id: ID, isEnabled: boolean): Promise<void> {
-    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 260);
-    return request<void>(`/admin/auth/providers/${id}`, { method: "PATCH", body: { isEnabled } });
   },
 
   async storage(): Promise<StorageBucket[]> {

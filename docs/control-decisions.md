@@ -159,3 +159,17 @@ switch that could not work. All three were deleted, on the same rule as the rest
 of this document: a control that lies is worse than none. If two-factor is built
 it should arrive with its controls, not before them.
 
+## Addendum — the Authentication page
+
+Most of this page reported success without saving anything. What remains is
+what is true:
+
+- **Kept, and now real:** session length. It was stored and ignored; new
+  sign-ins now get it.
+- **Kept, as a statement:** the 12-character minimum. It is fixed in the server,
+  so it is shown, not offered.
+- **Deleted:** the sign-in provider switches (Okta, Google and the rest), *Re-run
+  sync*, and the SCIM endpoint. Nothing behind them existed — the provider
+  toggle endpoint was a documented no-op that answered success. If single
+  sign-on is built, its controls arrive with it.
+

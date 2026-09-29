@@ -365,18 +365,6 @@ export interface AuditLogEntry {
   severity: AuditSeverity;
 }
 
-export type AuthProviderKind = "password" | "saml" | "oidc" | "oauth" | "scim";
-
-export interface AuthProvider {
-  id: ID;
-  name: string;
-  kind: AuthProviderKind;
-  description: string;
-  isEnabled: boolean;
-  isConfigured: boolean;
-  lastSyncAt: string | null;
-}
-
 export interface StorageBucket {
   key: string;
   label: string;

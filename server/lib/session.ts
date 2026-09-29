@@ -31,9 +31,31 @@ export interface SessionContext {
  * request. Redis holding only the user id means a revoked row disappears from
  * both as soon as the key is dropped.
  */
-export async function createSession(userId: string, request?: Request): Promise<string> {
+/**
+ * How long a new sign-in for this person lasts, in seconds.
+ *
+ * The workspace chooses (Admin → Authentication, stored as sessionTimeoutHours);
+ * the environment's value is only the fallback for a workspace that never set
+ * one. It applies to sign-ins from now on — a session already issued keeps the
+ * expiry it was given.
+ */
+export async function sessionLifetimeSeconds(userId: string): Promise<number> {
+  const row = await queryOne<{ hours: string | null }>(
+    `SELECT w.settings->>'sessionTimeoutHours' AS hours
+       FROM users u JOIN workspaces w ON w.id = u.workspace_id WHERE u.id = $1`,
+    [userId],
+  );
+  const hours = Number(row?.hours);
+  return Number.isInteger(hours) && hours >= 1 && hours <= 8_760 ? hours * 3_600 : env.sessionTtlSeconds;
+}
+
+export async function createSession(
+  userId: string,
+  request?: Request,
+): Promise<{ sessionId: string; expiresAt: Date; lifetimeSeconds: number }> {
   const sessionId = randomUUID();
-  const expiresAt = new Date(Date.now() + env.sessionTtlSeconds * 1000);
+  const lifetimeSeconds = await sessionLifetimeSeconds(userId);
+  const expiresAt = new Date(Date.now() + lifetimeSeconds * 1000);
 
   const agent = request?.headers.get("user-agent") ?? "";
   const isMobile = /iPhone|Android|iPad/i.test(agent);
@@ -53,10 +75,10 @@ export async function createSession(userId: string, request?: Request): Promise<
     ],
   );
 
-  await redis.set(sessionKey(sessionId), userId, "EX", env.sessionTtlSeconds);
+  await redis.set(sessionKey(sessionId), userId, "EX", lifetimeSeconds);
   await query(`UPDATE users SET last_sign_in_at = now() WHERE id = $1`, [userId]);
 
-  return sessionId;
+  return { sessionId, expiresAt, lifetimeSeconds };
 }
 
 /**
@@ -64,8 +86,12 @@ export async function createSession(userId: string, request?: Request): Promise<
  * the caller's current session ends too — switching workspace or moving into
  * a new one must not leave the old sign-in live behind the new cookie.
  */
-export async function signInAs(userId: string, request: Request, replacing?: string): Promise<string> {
-  const sessionId = await createSession(userId, request);
+export async function signInAs(
+  userId: string,
+  request: Request,
+  replacing?: string,
+): Promise<{ sessionId: string; expiresAt: Date }> {
+  const { sessionId, expiresAt, lifetimeSeconds } = await createSession(userId, request);
   if (replacing) await destroySession(replacing);
   const store = await cookies();
   store.set(env.sessionCookie, sessionId, {
@@ -73,9 +99,9 @@ export async function signInAs(userId: string, request: Request, replacing?: str
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: env.sessionTtlSeconds,
+    maxAge: lifetimeSeconds,
   });
-  return sessionId;
+  return { sessionId, expiresAt };
 }
 
 /** Ends every session a person has, on every device. */
@@ -167,13 +193,16 @@ export async function getSession(): Promise<SessionContext | null> {
 
   if (!userId) {
     // Redis is a cache, not the source of truth — fall back and repopulate.
-    const row = await queryOne<{ user_id: string }>(
-      `SELECT user_id FROM sessions WHERE id = $1 AND expires_at > now()`,
+    const row = await queryOne<{ user_id: string; remaining: string }>(
+      `SELECT user_id, extract(epoch FROM expires_at - now())::int AS remaining
+         FROM sessions WHERE id = $1 AND expires_at > now()`,
       [sessionId],
     );
     if (!row) return null;
     userId = row.user_id;
-    await redis.set(sessionKey(sessionId), userId, "EX", env.sessionTtlSeconds);
+    // For what is left of it — not a fresh full lifetime, which would quietly
+    // extend a session past the expiry it was issued with.
+    await redis.set(sessionKey(sessionId), userId, "EX", Math.max(1, Number(row.remaining)));
   }
 
   const user = await queryOne<UserRow & { workspace_id: string }>(
