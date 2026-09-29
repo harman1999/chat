@@ -3,6 +3,8 @@ import { query, queryOne, transaction } from "../db/client";
 import { hashPassword } from "../lib/password";
 import { defaultPreferences } from "../../src/config";
 import { roleIdFor } from "./roles";
+import { storage } from "../lib/storage";
+import type { ImageMime } from "../lib/images";
 import type { PresenceStatus, User, UserPreferences, UserSession } from "../../src/types";
 
 export const USER_COLUMNS = `
@@ -203,6 +205,48 @@ export const usersRepo = {
     const user = await usersRepo.get(id);
     // The row was just written in a committed transaction, so this cannot miss.
     return { ok: true, user: user as User, channels };
+  },
+
+  /**
+   * Replaces a profile photo. The new file is written before the row points at
+   * it, and the old one removed only after, so a failure part-way never
+   * leaves the profile pointing at nothing. Returns the new URL.
+   */
+  async setAvatar(userId: string, data: Buffer, mime: ImageMime): Promise<string> {
+    const previous = await queryOne<{ avatar_key: string | null }>(
+      `SELECT avatar_key FROM users WHERE id = $1`,
+      [userId],
+    );
+    const key = `avatars/${userId}/${randomUUID()}`;
+    await storage.put(key, data);
+    // Versioned, so every screen that cached the old photo fetches the new one.
+    const url = `/api/v1/users/${userId}/avatar?v=${Date.now()}`;
+    await query(`UPDATE users SET avatar_key = $2, avatar_mime = $3, avatar_url = $4 WHERE id = $1`, [
+      userId,
+      key,
+      mime,
+      url,
+    ]);
+    if (previous?.avatar_key) await storage.remove(previous.avatar_key);
+    return url;
+  },
+
+  async clearAvatar(userId: string): Promise<void> {
+    const previous = await queryOne<{ avatar_key: string | null }>(
+      `SELECT avatar_key FROM users WHERE id = $1`,
+      [userId],
+    );
+    await query(`UPDATE users SET avatar_key = NULL, avatar_mime = NULL, avatar_url = NULL WHERE id = $1`, [userId]);
+    if (previous?.avatar_key) await storage.remove(previous.avatar_key);
+  },
+
+  /** A photo to serve, only for someone in the given workspace. */
+  async avatarOf(userId: string, workspaceId: string): Promise<{ key: string; mime: ImageMime } | null> {
+    const row = await queryOne<{ avatar_key: string | null; avatar_mime: ImageMime | null }>(
+      `SELECT avatar_key, avatar_mime FROM users WHERE id = $1 AND workspace_id = $2`,
+      [userId, workspaceId],
+    );
+    return row?.avatar_key && row.avatar_mime ? { key: row.avatar_key, mime: row.avatar_mime } : null;
   },
 
   /** With a workspace, only someone in it — for anything a caller can name by id. */

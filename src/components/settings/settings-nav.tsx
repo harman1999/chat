@@ -3,7 +3,6 @@
 import {
   Bell,
   CircleUserRound,
-  KeyRound,
   Palette,
   SlidersHorizontal,
   type LucideIcon,
@@ -21,14 +20,8 @@ export const SETTINGS_SECTIONS: {
   {
     href: "/settings/profile",
     label: "Profile",
-    description: "Name, role and status",
+    description: "Photo, name, email and password",
     icon: CircleUserRound,
-  },
-  {
-    href: "/settings/account",
-    label: "Account",
-    description: "Email, password and sessions",
-    icon: KeyRound,
   },
   {
     href: "/settings/appearance",

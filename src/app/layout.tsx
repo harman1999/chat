@@ -39,7 +39,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${mono.variable} antialiased`}>
+      {/* Browser extensions (Grammarly, password managers) add attributes to
+          <body> before React loads. suppressHydrationWarning ignores attribute
+          differences on this one element only; children are still checked. */}
+      <body className={`${inter.variable} ${mono.variable} antialiased`} suppressHydrationWarning>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

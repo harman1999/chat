@@ -70,6 +70,12 @@ export const emailSchema = z.object({
   email: z.string().trim().email().max(320),
 });
 
+export const emailChangeSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(320),
+  /** The current password: whoever controls the address controls sign-in. */
+  password: z.string().min(1).max(512),
+});
+
 export const passwordSchema = z.object({
   currentPassword: z.string().min(1).max(512),
   newPassword: z.string().min(12, "Passwords must be at least 12 characters").max(512),

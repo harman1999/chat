@@ -3,11 +3,10 @@ import type {
   PresenceStatus,
   User,
   UserPreferences,
-  UserSession,
   UserStatus,
 } from "@/types";
 import { defaultPreferences } from "@/config";
-import { sessions, users, usersById } from "@/data";
+import { users, usersById } from "@/data";
 import { mockResolve, request, USE_MOCK_TRANSPORT } from "./http";
 
 export interface UpdateProfileInput {
@@ -44,9 +43,21 @@ export const userService = {
     return request<void>("/users/me", { method: "PATCH", body: input });
   },
 
-  async changeEmail(email: string): Promise<void> {
-    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 400);
-    return request<void>("/users/me/email", { method: "PUT", body: { email } });
+  /** Takes effect at once; the current password confirms it. */
+  async changeEmail(email: string, password: string): Promise<{ email: string }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ email }, 400);
+    return request<{ email: string }>("/users/me/email", { method: "PUT", body: { email, password } });
+  },
+
+  /** Replaces the profile photo. Resolves to its new URL. */
+  async uploadAvatar(file: File): Promise<{ avatarUrl: string }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ avatarUrl: URL.createObjectURL(file) }, 300);
+    return request<{ avatarUrl: string }>("/users/me/avatar", { method: "PUT", body: file });
+  },
+
+  async removeAvatar(): Promise<void> {
+    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 200);
+    return request<void>("/users/me/avatar", { method: "DELETE" });
   },
 
   async changePassword(current: string, next: string): Promise<void> {
@@ -66,20 +77,5 @@ export const userService = {
   async updatePreferences(patch: Partial<UserPreferences>): Promise<void> {
     if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 180);
     return request<void>("/users/me/preferences", { method: "PATCH", body: patch });
-  },
-
-  async listSessions(): Promise<UserSession[]> {
-    if (USE_MOCK_TRANSPORT) return mockResolve(sessions, 260);
-    return request<UserSession[]>("/users/me/sessions");
-  },
-
-  async revokeSession(id: ID): Promise<void> {
-    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 300);
-    return request<void>(`/users/me/sessions/${id}`, { method: "DELETE" });
-  },
-
-  async revokeOtherSessions(): Promise<void> {
-    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 450);
-    return request<void>("/users/me/sessions", { method: "DELETE" });
   },
 };

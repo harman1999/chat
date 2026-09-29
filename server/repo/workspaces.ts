@@ -5,26 +5,9 @@ import type { RoleKind, SystemSettings } from "../../src/types";
 import { storage } from "../lib/storage";
 import { initialsOf } from "../../src/lib/format";
 
-/** Formats a logo may be. SVG is left out on purpose: it can carry script. */
-export type LogoMime = "image/png" | "image/jpeg" | "image/webp";
-
-export const MAX_LOGO_BYTES = 1024 * 1024;
-
-/**
- * Identifies an image by its first bytes, not by what the client says it is.
- * A declared Content-Type is only a claim; the bytes are what a browser will
- * actually interpret.
- */
-export function sniffLogo(data: Buffer): LogoMime | null {
-  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
-    return "image/png";
-  }
-  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return "image/jpeg";
-  if (data.length >= 12 && data.toString("ascii", 0, 4) === "RIFF" && data.toString("ascii", 8, 12) === "WEBP") {
-    return "image/webp";
-  }
-  return null;
-}
+export { MAX_LOGO_BYTES } from "../lib/images";
+export { sniffImage as sniffLogo, type ImageMime as LogoMime } from "../lib/images";
+import type { ImageMime as LogoMime } from "../lib/images";
 
 /** The URL clients use. Versioned by upload time so a changed logo is refetched. */
 export function logoUrlOf(workspaceId: string, updatedAt: Date | null): string | null {

@@ -1,18 +1,121 @@
 "use client";
 
-import { Camera, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Camera, Loader2, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { UserAvatar } from "@/components/common";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog, type ConfirmOptions } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUser } from "@/hooks";
 import { TIMEZONES } from "@/config";
 import { userService } from "@/services";
+import { isApiError } from "@/services/http";
+import type { User } from "@/types";
 import { useSettingsStore } from "@/store";
 import { SettingRow, SettingSection, SettingSelect } from "./setting-primitives";
+import { SignInSettings } from "./sign-in-settings";
 import { StatusControl } from "./status-control";
+
+/** Mirrors the server: raster only (SVG can carry script), 2 MB. */
+const PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Upload or remove the profile photo. Applies at once rather than waiting for
+ * Save changes: a file is not something to hold as a draft.
+ */
+function PhotoControl({ user }: { user: User }) {
+  const queryClient = useQueryClient();
+  const input = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
+
+  // The photo shows on messages, member lists and mentions — all read from these.
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["current-user"] }),
+      queryClient.invalidateQueries({ queryKey: ["users"] }),
+    ]);
+
+  const upload = async (file: File) => {
+    if (!PHOTO_TYPES.includes(file.type)) {
+      toast.error("That file can't be used", { description: "Use a PNG, JPEG or WebP image." });
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      toast.error("That image is too large", { description: "Photos must be 2 MB or smaller." });
+      return;
+    }
+    setIsUploading(true);
+    try {
+      await userService.uploadAvatar(file);
+      await refresh();
+      toast.success("Photo updated");
+    } catch (error) {
+      toast.error("Could not upload the photo", {
+        description: isApiError(error) ? error.message : undefined,
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const askToRemove = () =>
+    setConfirm({
+      title: "Remove your photo?",
+      description: "Your initials will show instead.",
+      destructive: true,
+      confirmLabel: "Yes, remove",
+      cancelLabel: "No",
+      onConfirm: async () => {
+        try {
+          await userService.removeAvatar();
+          await refresh();
+          toast.success("Photo removed");
+        } catch (error) {
+          toast.error("Could not remove the photo", {
+            description: isApiError(error) ? error.message : undefined,
+          });
+          throw error;
+        }
+      },
+    });
+
+  return (
+    <div className="flex items-center gap-3">
+      <UserAvatar user={user} size="xl" showPresence />
+      <input
+        ref={input}
+        type="file"
+        accept={PHOTO_TYPES.join(",")}
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void upload(file);
+        }}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" disabled={isUploading} onClick={() => input.current?.click()}>
+          {isUploading ? <Loader2 className="animate-spin" /> : <Camera />}
+          {user.avatarUrl ? "Change photo" : "Upload photo"}
+        </Button>
+        {user.avatarUrl && (
+          <Button variant="danger-ghost" size="sm" disabled={isUploading} onClick={askToRemove}>
+            <Trash2 />
+            Remove
+          </Button>
+        )}
+      </div>
+      <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
+    </div>
+  );
+}
 
 export function ProfileSettings() {
   const { data: user } = useCurrentUser();
@@ -75,19 +178,11 @@ export function ProfileSettings() {
           </Button>
         }
       >
-        <SettingRow label="Photo" description="PNG or JPG, at least 256×256 and under 2 MB.">
-          <div className="flex items-center gap-3">
-            <UserAvatar user={user} size="xl" showPresence />
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm">
-                <Camera />
-                Upload photo
-              </Button>
-              <Button variant="ghost" size="sm">
-                Remove
-              </Button>
-            </div>
-          </div>
+        <SettingRow
+          label="Photo"
+          description="PNG, JPEG or WebP, up to 2 MB. Square works best. Changes apply straight away."
+        >
+          <PhotoControl user={user} />
         </SettingRow>
 
         <SettingRow
@@ -172,6 +267,8 @@ export function ProfileSettings() {
           <StatusControl />
         </SettingRow>
       </SettingSection>
+
+      <SignInSettings />
     </>
   );
 }

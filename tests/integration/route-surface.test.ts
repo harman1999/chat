@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ACCOUNTS, anonFetch, assertServerRunning, closeDb, signIn, type Client } from "./helpers";
+import { ACCOUNTS, anonFetch, assertServerRunning, cache, closeCache, closeDb, signIn, type Client } from "./helpers";
 
 /**
  * The route table is discovered from the filesystem rather than listed here, so
@@ -109,7 +109,15 @@ describe("route surface", () => {
     member = await signIn(ACCOUNTS.member);
   });
 
-  afterAll(closeDb);
+  afterAll(async () => {
+    // Every anonymous probe counts against the per-IP buckets — the password
+    // bucket alone is shared by four routes and allows five. Left full, they
+    // would rate-limit the next suite's session-less requests (bearer tokens).
+    const keys = await cache().keys("ratelimit:*:ip:*");
+    if (keys.length) await cache().del(...keys);
+    await closeCache();
+    await closeDb();
+  });
 
   it("discovered every route in the app directory", () => {
     // A guard on the guard: if the walker silently stops finding routes, the
