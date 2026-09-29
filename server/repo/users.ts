@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { query, queryOne, transaction } from "../db/client";
 import { hashPassword } from "../lib/password";
 import { defaultPreferences } from "../../src/config";
+import { roleIdFor } from "./roles";
+import { storage } from "../lib/storage";
+import type { ImageMime } from "../lib/images";
 import type { PresenceStatus, User, UserPreferences, UserSession } from "../../src/types";
 
 export const USER_COLUMNS = `
@@ -125,12 +128,12 @@ export const usersRepo = {
   async create(input: CreateUserInput): Promise<CreateUserResult> {
     const username = input.username?.trim() || usernameFrom(input.fullName);
     const email = input.email.trim().toLowerCase();
-    const roleId = input.roleId ?? "role_member";
+    const roleId = input.roleId ?? (await roleIdFor(input.workspaceId, "member"));
 
     // users.role_id carries no foreign key, so an unknown id would be written
     // silently and only surface later as a broken permission check.
-    const role = await queryOne<{ id: string }>(
-      `SELECT id FROM roles WHERE id = $1 AND workspace_id = $2`,
+    const role = await queryOne<{ id: string; kind: string | null }>(
+      `SELECT id, kind FROM roles WHERE id = $1 AND workspace_id = $2`,
       [roleId, input.workspaceId],
     );
     if (!role) return { ok: false, reason: "unknown_role", roleId };
@@ -177,8 +180,9 @@ export const usersRepo = {
           input.department ?? "",
           input.timezone || "UTC",
           avatarColor(id),
-          // `role` is the legacy display column; `role_id` is what permissions read.
-          roleId.replace(/^role_/, ""),
+          // `role` is the legacy display column; `role_id` is what permissions
+          // read. It follows the role's kind; a custom role counts as member.
+          role.kind ?? "member",
           roleId,
         ],
       );
@@ -203,9 +207,75 @@ export const usersRepo = {
     return { ok: true, user: user as User, channels };
   },
 
-  async get(id: string): Promise<User | null> {
-    const row = await queryOne<UserRow>(`SELECT ${USER_COLUMNS} FROM users u WHERE u.id = $1`, [id]);
+  /**
+   * Replaces a profile photo. The new file is written before the row points at
+   * it, and the old one removed only after, so a failure part-way never
+   * leaves the profile pointing at nothing. Returns the new URL.
+   */
+  async setAvatar(userId: string, data: Buffer, mime: ImageMime): Promise<string> {
+    const previous = await queryOne<{ avatar_key: string | null }>(
+      `SELECT avatar_key FROM users WHERE id = $1`,
+      [userId],
+    );
+    const key = `avatars/${userId}/${randomUUID()}`;
+    await storage.put(key, data);
+    // Versioned, so every screen that cached the old photo fetches the new one.
+    const url = `/api/v1/users/${userId}/avatar?v=${Date.now()}`;
+    await query(`UPDATE users SET avatar_key = $2, avatar_mime = $3, avatar_url = $4 WHERE id = $1`, [
+      userId,
+      key,
+      mime,
+      url,
+    ]);
+    if (previous?.avatar_key) await storage.remove(previous.avatar_key);
+    return url;
+  },
+
+  async clearAvatar(userId: string): Promise<void> {
+    const previous = await queryOne<{ avatar_key: string | null }>(
+      `SELECT avatar_key FROM users WHERE id = $1`,
+      [userId],
+    );
+    await query(`UPDATE users SET avatar_key = NULL, avatar_mime = NULL, avatar_url = NULL WHERE id = $1`, [userId]);
+    if (previous?.avatar_key) await storage.remove(previous.avatar_key);
+  },
+
+  /** A photo to serve, only for someone in the given workspace. */
+  async avatarOf(userId: string, workspaceId: string): Promise<{ key: string; mime: ImageMime } | null> {
+    const row = await queryOne<{ avatar_key: string | null; avatar_mime: ImageMime | null }>(
+      `SELECT avatar_key, avatar_mime FROM users WHERE id = $1 AND workspace_id = $2`,
+      [userId, workspaceId],
+    );
+    return row?.avatar_key && row.avatar_mime ? { key: row.avatar_key, mime: row.avatar_mime } : null;
+  },
+
+  /** With a workspace, only someone in it — for anything a caller can name by id. */
+  async get(id: string, workspaceId?: string): Promise<User | null> {
+    const row = await queryOne<UserRow>(
+      `SELECT ${USER_COLUMNS} FROM users u WHERE u.id = $1 AND ($2::text IS NULL OR u.workspace_id = $2)`,
+      [id, workspaceId ?? null],
+    );
     return row ? mapUser(row) : null;
+  },
+
+  /**
+   * Every sign-in-capable account with this email, one per workspace at most,
+   * optionally only the one in the workspace with this slug.
+   */
+  async accountsForSignIn(email: string, workspaceSlug?: string) {
+    return query<UserRow & {
+      password_hash: string | null; account_status: string;
+      workspace_id: string; workspace_slug: string; workspace_name: string;
+    }>(
+      `SELECT ${USER_COLUMNS}, u.password_hash, u.account_status,
+              w.id AS workspace_id, w.slug AS workspace_slug, w.name AS workspace_name
+         FROM users u JOIN workspaces w ON w.id = u.workspace_id
+        WHERE lower(u.email) = lower($1) AND NOT u.is_bot
+          AND ($2::text IS NULL OR w.slug = $2)
+        ORDER BY w.name
+        LIMIT 50`,
+      [email, workspaceSlug ?? null],
+    );
   },
 
   async findByEmail(workspaceId: string, email: string) {

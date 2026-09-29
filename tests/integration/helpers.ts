@@ -27,23 +27,48 @@ export async function assertServerRunning(): Promise<void> {
   }
 }
 
-export async function signIn(email: string, password = DEMO_PASSWORD): Promise<Client> {
+/**
+ * Signs in to the Northwind account by default. Named explicitly because an
+ * email can have accounts in several workspaces — the multi-workspace tests
+ * create one — and then sign-in asks which.
+ */
+/**
+ * The address this test file signs in from, as far as the rate limiter can tell.
+ *
+ * Sign-ins are limited to 100 per five minutes per address, and every file in
+ * the suite used to sign in from the same one (localhost). The suite grew past
+ * 100 sign-ins, and whichever files ran last were refused with 429 — a failure
+ * that looked like a broken feature and was only arithmetic. Each file now gets
+ * its own address (the limiter reads X-Forwarded-For), so a file can sign in as
+ * often as it needs without spending anyone else's allowance. Vitest loads this
+ * module fresh per file, so the address differs per file.
+ */
+const TEST_IP = `10.${Math.floor(Math.random() * 250) + 1}.${Math.floor(Math.random() * 250) + 1}.${Math.floor(Math.random() * 250) + 1}`;
+
+export async function signIn(email: string, password = DEMO_PASSWORD, workspace = "northwind"): Promise<Client> {
   const response = await fetch(`${BASE_URL}/api/v1/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    headers: { "Content-Type": "application/json", "X-Forwarded-For": TEST_IP },
+    body: JSON.stringify({ email, password, workspace }),
   });
 
   if (!response.ok) {
     throw new Error(`Sign-in failed for ${email}: ${response.status}`);
   }
 
-  const setCookie = response.headers.get("set-cookie") ?? "";
-  const cookie = setCookie.split(";")[0];
   const body = (await response.json()) as { user: { id: string } };
+  return asClient(sessionCookieOf(response), body.user.id);
+}
 
+/** The `name=value` of the session cookie a response set. */
+export function sessionCookieOf(response: Response): string {
+  return (response.headers.get("set-cookie") ?? "").split(";")[0];
+}
+
+/** A client for a cookie some other request produced — creating or switching workspace. */
+export function asClient(cookie: string, userId: string): Client {
   return {
-    userId: body.user.id,
+    userId,
     cookie,
     fetch: (path, init = {}) =>
       fetch(`${BASE_URL}/api/v1${path}`, {

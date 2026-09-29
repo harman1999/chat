@@ -1,6 +1,7 @@
 "use client";
 
 import { UserAvatar } from "@/components/common";
+import { useCurrentUserId } from "@/hooks";
 import { cn } from "@/lib/utils";
 import type { User } from "@/types";
 
@@ -17,6 +18,7 @@ export function MentionMenu({
   activeIndex: number;
   onSelect: (user: User) => void;
 }) {
+  const currentUserId = useCurrentUserId();
   if (users.length === 0) return null;
 
   return (
@@ -49,6 +51,9 @@ export function MentionMenu({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs font-medium text-fg">
                   {user.displayName}
+                  {user.id === currentUserId && (
+                    <span className="ml-1 font-normal text-fg-subtle">(you)</span>
+                  )}
                 </span>
                 <span className="block truncate text-[0.625rem] text-fg-subtle">{user.title}</span>
               </span>

@@ -1,11 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { ListSkeleton } from "@/components/common";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Hint } from "@/components/ui/tooltip";
-
 import { channelService, workspaceService } from "@/services";
 import { useUIStore, useWorkspaceStore } from "@/store";
 import { cn } from "@/lib/utils";
@@ -17,17 +15,16 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
  * The workspace sidebar. Rendered inline on desktop and inside a drawer on
- * small screens, so it takes `isCollapsed` and `showCollapseToggle` rather than
- * reading viewport state itself.
+ * small screens, so it takes `isCollapsed` and `onClose` rather than reading
+ * viewport state itself. The collapse toggle lives in the top bar, beside the
+ * workspace switcher.
  */
 export function WorkspaceSidebar({
   isCollapsed = false,
-  showCollapseToggle = true,
   onClose,
   className,
 }: {
   isCollapsed?: boolean;
-  showCollapseToggle?: boolean;
   /** Renders a close control — used when the sidebar is inside the mobile drawer. */
   onClose?: () => void;
   className?: string;
@@ -35,8 +32,8 @@ export function WorkspaceSidebar({
   const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const collapsedGroups = useWorkspaceStore((state) => state.collapsedGroups);
   const toggleGroup = useWorkspaceStore((state) => state.toggleGroup);
-  const toggleSidebar = useUIStore((state) => state.toggleSidebar);
   const openCreateChannel = useUIStore((state) => state.setCreateChannelOpen);
+  const openNewDirectMessage = useUIStore((state) => state.setNewDirectMessageOpen);
 
   const workspacesQuery = useQuery({
     queryKey: ["workspaces"],
@@ -63,17 +60,13 @@ export function WorkspaceSidebar({
       )}
       data-collapsed={isCollapsed || undefined}
     >
-      {/* Workspace header */}
-      <div
-        className={cn(
-          "flex shrink-0 items-center gap-1 border-b border-sidebar-border",
-          isCollapsed ? "flex-col px-2 py-2" : "h-14 pl-2 pr-1.5",
-        )}
-      >
-        <div className="min-w-0 flex-1">
-          <WorkspaceSwitcher workspaces={workspacesQuery.data ?? []} isCollapsed={isCollapsed} />
-        </div>
-        {onClose && (
+      {/* The workspace switcher lives in the top bar on desktop. Only the
+          mobile drawer, which has no top bar beside it, keeps it here. */}
+      {onClose && (
+        <div className="flex h-14 shrink-0 items-center gap-1 border-b border-sidebar-border pl-2 pr-1.5">
+          <div className="min-w-0 flex-1">
+            <WorkspaceSwitcher workspaces={workspacesQuery.data ?? []} />
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -82,29 +75,8 @@ export function WorkspaceSidebar({
           >
             <X className="size-4" />
           </button>
-        )}
-        {showCollapseToggle && (
-          <Hint
-            label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            shortcut="⌘B"
-            side={isCollapsed ? "right" : "bottom"}
-          >
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-pressed={isCollapsed}
-              className="grid size-7 shrink-0 place-items-center rounded-md text-sidebar-subtle transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg focus-sidebar"
-            >
-              {isCollapsed ? (
-                <PanelLeftOpen className="size-4" />
-              ) : (
-                <PanelLeftClose className="size-4" />
-              )}
-            </button>
-          </Hint>
-        )}
-      </div>
+        </div>
+      )}
 
       <ScrollArea
         variant="sidebar"
@@ -152,6 +124,7 @@ export function WorkspaceSidebar({
           isCollapsed={isCollapsed}
           isOpen={!collapsedGroups.dms}
           onToggle={() => toggleGroup("dms")}
+          onAdd={() => openNewDirectMessage(true)}
           addLabel="Start a direct message"
         >
           {dmQuery.isPending ? (
@@ -165,7 +138,16 @@ export function WorkspaceSidebar({
                   isCollapsed={isCollapsed}
                 />
               ))}
-
+              {!isCollapsed && (
+                <button
+                  type="button"
+                  onClick={() => openNewDirectMessage(true)}
+                  className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-subtle transition-colors hover:bg-sidebar-hover hover:text-sidebar-fg focus-sidebar"
+                >
+                  <Plus className="size-4 shrink-0" aria-hidden />
+                  <span className="truncate">New message</span>
+                </button>
+              )}
             </>
           )}
         </SidebarGroup>

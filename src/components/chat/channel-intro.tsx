@@ -4,12 +4,13 @@ import { Hash, Lock, UserPlus } from "lucide-react";
 import { useUIStore } from "@/store";
 import { UserAvatar } from "@/components/common";
 import { Button } from "@/components/ui/button";
-import { useUserMap } from "@/hooks";
+import { useCurrentUserId, useUserMap } from "@/hooks";
 import type { Channel } from "@/types";
 
 /** Header shown once the full history is loaded — the top of the conversation. */
 export function ChannelIntro({ conversation }: { conversation: Channel }) {
   const usersById = useUserMap();
+  const currentUserId = useCurrentUserId();
   const openAddPeople = useUIStore((state) => state.setAddPeopleOpen);
   const isChannel = conversation.kind === "public" || conversation.kind === "private";
   const Glyph = conversation.kind === "private" ? Lock : Hash;
@@ -27,15 +28,30 @@ export function ChannelIntro({ conversation }: { conversation: Channel }) {
       <div className="flex flex-col items-start gap-3 px-3 pb-4 pt-8 sm:px-4">
         <UserAvatar user={partner} size="xl" showPresence />
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-fg">{partner.displayName}</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-fg">
+            {partner.displayName}
+            {partner.id === currentUserId && (
+              <span className="ml-1.5 font-normal text-fg-subtle">(you)</span>
+            )}
+          </h2>
           <p className="text-sm text-fg-muted">
             {partner.title} · {partner.department}
           </p>
         </div>
         <p className="max-w-xl text-sm leading-relaxed text-fg-muted">
-          This is the beginning of your direct message history with{" "}
-          <span className="font-medium text-fg">{partner.displayName}</span>. Messages here are
-          visible only to the two of you.
+          {partner.id === currentUserId ? (
+            // "The two of you" is false when there is one of you.
+            <>
+              This is your space. Draft messages, keep links to hand, or leave yourself a
+              reminder — nobody else can see what is here.
+            </>
+          ) : (
+            <>
+              This is the beginning of your direct message history with{" "}
+              <span className="font-medium text-fg">{partner.displayName}</span>. Messages here
+              are visible only to the two of you.
+            </>
+          )}
         </p>
       </div>
     );

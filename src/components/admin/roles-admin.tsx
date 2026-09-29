@@ -1,14 +1,66 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { Lock, ShieldCheck, Users } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Lock, Plus, ShieldCheck, Trash2, Users } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog, type ConfirmOptions } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { adminService } from "@/services";
+import { isApiError } from "@/services/http";
+import type { Role } from "@/types";
 import { AdminPage } from "./admin-page";
+import { CreateRoleDialog } from "./create-role-dialog";
+import { formatMembers } from "@/lib/format";
 
 export function RolesAdmin() {
+  const queryClient = useQueryClient();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
+
+  const askToDelete = (role: Role) =>
+    setConfirm({
+      title: `Delete ${role.name}?`,
+      destructive: true,
+      confirmLabel: "Yes, delete",
+      cancelLabel: "No, keep it",
+      // Says what actually happens to people, not just "are you sure".
+      description:
+        role.memberCount > 0 ? (
+          <>
+            <strong className="font-medium text-fg">
+              {role.memberCount.toLocaleString()} {role.memberCount === 1 ? "person" : "people"}
+            </strong>{" "}
+            will be moved to <strong className="font-medium text-fg">Member</strong> and lose
+            any permissions only this role gave them. This cannot be undone.
+          </>
+        ) : (
+          <>Nobody has this role, so no one is affected. This cannot be undone.</>
+        ),
+      onConfirm: async () => {
+        try {
+          const result = await adminService.deleteRole(role.id);
+          await queryClient.invalidateQueries({ queryKey: ["admin-roles"] });
+          await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+          toast.success("Role deleted", {
+            description:
+              result.movedMembers > 0
+                ? `${result.movedMembers} moved to Member`
+                : role.name,
+          });
+        } catch (error) {
+          toast.error("Could not delete the role", {
+            description: isApiError(error) ? error.message : undefined,
+          });
+          // Rethrown so the dialog stays open on failure: closing it would read
+          // as success.
+          throw error;
+        }
+      },
+    });
+
   const rolesQuery = useQuery({ queryKey: ["admin-roles"], queryFn: () => adminService.listRoles() });
   const permissionsQuery = useQuery({
     queryKey: ["admin-permissions"],
@@ -21,8 +73,20 @@ export function RolesAdmin() {
     <AdminPage
       title="Roles"
       description="Roles bundle permissions. Everyone in the workspace has exactly one."
-
+      actions={
+        <Button variant="primary" size="sm" onClick={() => setIsCreateOpen(true)}>
+          <Plus />
+          Create role
+        </Button>
+      }
     >
+      <CreateRoleDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        roles={rolesQuery.data ?? []}
+      />
+      <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
+
       {rolesQuery.isPending ? (
         <div className="space-y-3">
           {[0, 1, 2].map((row) => (
@@ -57,7 +121,7 @@ export function RolesAdmin() {
                     <div className="mt-3 flex flex-wrap items-center gap-4">
                       <span className="flex items-center gap-1.5 text-2xs text-fg-muted">
                         <Users className="size-3.5 text-fg-subtle" aria-hidden />
-                        {role.memberCount.toLocaleString()} members
+                        {formatMembers(role.memberCount)}
                       </span>
                       <span className="flex min-w-40 items-center gap-2 text-2xs text-fg-muted">
                         {granted} of {totalPermissions} permissions
@@ -79,7 +143,20 @@ export function RolesAdmin() {
                     <Button variant="secondary" size="sm" asChild>
                       <a href="/admin/permissions">Edit permissions</a>
                     </Button>
-
+                    {/* Built-in roles are what the rest of the product assumes
+                        exists, so they are not offered for deletion at all
+                        rather than offered and then refused. */}
+                    {!role.isSystem && (
+                      <Button
+                        variant="danger-ghost"
+                        size="sm"
+                        aria-label={`Delete ${role.name}`}
+                        onClick={() => askToDelete(role)}
+                      >
+                        <Trash2 />
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
               </article>

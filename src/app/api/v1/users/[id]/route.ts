@@ -3,9 +3,9 @@ import { requireSession } from "@server/lib/session";
 import { usersRepo } from "@server/repo/users";
 
 export const GET = handler(async (_request: Request, ctx: { params: Promise<{ id: string }> }) => {
-  await requireSession();
+  const { workspaceId } = await requireSession();
   const { id } = await ctx.params;
-  const user = await usersRepo.get(id);
+  const user = await usersRepo.get(id, workspaceId);
   if (!user) return problem(404, "not_found", "User not found");
   return json(user);
 });

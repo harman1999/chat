@@ -13,8 +13,8 @@ describe("AddMemberDialog", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(adminService, "listRoles").mockResolvedValue([
-      { id: "role_member", name: "Member", description: "", permissionIds: [], memberCount: 0, isSystem: true },
-      { id: "role_admin", name: "Administrator", description: "", permissionIds: [], memberCount: 0, isSystem: true },
+      { id: "role_member", name: "Member", description: "", permissionIds: [], memberCount: 0, isSystem: true, kind: "member" },
+      { id: "role_admin", name: "Administrator", description: "", permissionIds: [], memberCount: 0, isSystem: true, kind: "admin" },
     ]);
   });
 

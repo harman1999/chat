@@ -20,18 +20,13 @@ export const GET = handler(async (request: Request, ctx: { params: Promise<{ id:
   const { id } = await ctx.params;
 
   const params = new URL(request.url).searchParams;
-  const providerError = params.get("error");
-  if (providerError) {
-    await integrationsRepo.markConnectionError(id, providerError);
-    return problem(400, "provider_refused", `The provider refused: ${providerError}`);
-  }
-
-  const code = params.get("code");
   const state = params.get("state");
-  if (!code || !state) return problem(400, "invalid_callback", "Missing code or state");
+  if (!state) return problem(400, "invalid_callback", "Missing state");
 
   // Single-use: consumed here so a replayed callback cannot mint a second
-  // exchange with the same state.
+  // exchange with the same state. Checked before anything is written — even
+  // an error from the provider — so a forged callback cannot mark someone's
+  // connection as failed.
   const stored = await redis.getdel(`oauth:state:${state}`);
   if (stored !== `${id}:${user.id}`) {
     return problem(400, "invalid_state", "This authorization did not start here, or it expired");
@@ -39,6 +34,15 @@ export const GET = handler(async (request: Request, ctx: { params: Promise<{ id:
 
   const connection = await integrationsRepo.getConnection(id, workspaceId);
   if (!connection) return problem(404, "not_found", "Connection not found");
+
+  const providerError = params.get("error");
+  if (providerError) {
+    await integrationsRepo.markConnectionError(id, providerError);
+    return problem(400, "provider_refused", `The provider refused: ${providerError}`);
+  }
+
+  const code = params.get("code");
+  if (!code) return problem(400, "invalid_callback", "Missing code");
 
   const tokenUrl = await assertSafeUrl(connection.token_url);
   const response = await fetch(tokenUrl, {

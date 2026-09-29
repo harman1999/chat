@@ -30,6 +30,18 @@ export const channelService = {
     return request<User[]>(`/channels/${id}/members`);
   },
 
+  /**
+   * Opens a direct message with someone, returning the existing one when there
+   * already is one.
+   */
+  async openDirectMessage(userId: ID): Promise<Channel> {
+    if (USE_MOCK_TRANSPORT) {
+      const existing = directMessages.find((dm) => dm.participantIds?.includes(userId));
+      return mockResolve(existing ?? directMessages[0], 200);
+    }
+    return request<Channel>("/dms", { method: "POST", body: { userId } });
+  },
+
   async create(input: {
     name: string;
     purpose?: string;

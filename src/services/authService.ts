@@ -5,6 +5,14 @@ import { mockResolve, request, USE_MOCK_TRANSPORT } from "./http";
 export interface Credentials {
   email: string;
   password: string;
+  /** Workspace slug, when the email has accounts in more than one. */
+  workspace?: string;
+}
+
+/** What sign-in answers when the email has accounts in several workspaces. */
+export interface WorkspaceChoice {
+  slug: string;
+  name: string;
 }
 
 export interface Session {

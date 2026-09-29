@@ -20,10 +20,10 @@ export const PUT = handler(async (request: Request, ctx: { params: Promise<{ id:
   );
   if (!role) return problem(422, "unknown_role", "That role does not exist in this workspace");
 
-  const target = await queryOne<{ id: string }>(`SELECT id FROM users WHERE id = $1`, [id]);
-  if (!target) return problem(404, "not_found", "User not found");
-
-  await adminRepo.setUserRole(id, roleId);
+  // Scoped to this workspace: someone in another one is "not found" here.
+  if (!(await adminRepo.setUserRole(workspaceId, id, roleId))) {
+    return problem(404, "not_found", "User not found");
+  }
   await audit({
     actorId: user.id,
     action: "user.role_changed",

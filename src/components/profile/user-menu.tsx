@@ -26,6 +26,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUser } from "@/hooks";
 import { PRESENCE_LABEL } from "@/lib/constants";
+import { reloadAs } from "@/lib/navigation";
+import { authService } from "@/services";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
 import { StatusControl } from "@/components/settings";
@@ -135,7 +137,15 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
 
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="danger" onSelect={() => router.push("/login")}>
+        <DropdownMenuItem
+          variant="danger"
+          onSelect={async () => {
+            // Ends the session on the server first; only visiting /login did
+            // nothing, since it sends anyone still signed in straight back.
+            await authService.signOut();
+            reloadAs("/login");
+          }}
+        >
           <LogOut />
           Sign out
         </DropdownMenuItem>

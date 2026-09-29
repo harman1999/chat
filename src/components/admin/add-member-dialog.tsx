@@ -57,7 +57,10 @@ export function AddMemberDialog({
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [title, setTitle] = useState("");
-  const [roleId, setRoleId] = useState("role_member");
+  // Null until chosen, meaning this workspace's Member role — whose id is not
+  // known until the roles load, and differs between workspaces.
+  const [chosenRoleId, setRoleId] = useState<string | null>(null);
+  const roleId = chosenRoleId ?? roles?.find((role) => role.kind === "member")?.id ?? "";
   const [password, setPassword] = useState(generatePassword);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +92,7 @@ export function AddMemberDialog({
     setEmail("");
     setUsername("");
     setTitle("");
-    setRoleId("role_member");
+    setRoleId(null);
     setPassword(generatePassword());
     setError(null);
   };
@@ -115,7 +118,7 @@ export function AddMemberDialog({
         fullName: fullName.trim(),
         password,
         username: effectiveUsername,
-        roleId,
+        roleId: roleId || undefined,
         title: title.trim(),
         channels: ["general"],
       });
@@ -230,7 +233,7 @@ export function AddMemberDialog({
                   onChange={(event) => setRoleId(event.target.value)}
                   className="h-8 w-full appearance-none rounded-md border border-border bg-surface pl-2.5 pr-8 text-sm text-fg shadow-xs transition-colors hover:border-border-strong focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-[color-mix(in_oklch,var(--accent)_35%,transparent)]"
                 >
-                  {(roles ?? [{ id: "role_member", name: "Member" }]).map((role) => (
+                  {(roles ?? [{ id: "", name: "Member" }]).map((role) => (
                     <option key={role.id} value={role.id}>
                       {role.name}
                     </option>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useActiveWorkspace } from "@/hooks";
 import { AdminPage } from "./admin-page";
 import { BotsPanel } from "./integrations/bots-panel";
 import {
@@ -30,11 +31,12 @@ const TABS = [
  */
 export function IntegrationsAdmin() {
   const [revealed, setRevealed] = useState<RevealedSecret | null>(null);
+  const workspace = useActiveWorkspace();
 
   return (
     <AdminPage
       title="Integrations"
-      description="Connect Northwind Technologies to the systems around it."
+      description={`Connect ${workspace?.name ?? "this workspace"} to the systems around it.`}
     >
       <SecretRevealDialog secret={revealed} onClose={() => setRevealed(null)} />
 

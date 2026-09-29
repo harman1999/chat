@@ -93,3 +93,83 @@ The admin dashboard's "Needs attention" panel carried two:
   not have. The row is gone and so is the `uptimePercent` field, so nothing can
   render it again. The System health panel reports what is genuinely known:
   process uptime, Redis reachability, and the last audit write.
+
+
+## Addendum — role management
+
+"Create role" and "Rename role" were deleted in Phase 11 because role CRUD beyond
+permission toggling was not modelled. **Create** and **delete** now are, with a
+real server route behind each (`POST /admin/roles`, `DELETE /admin/roles/:id`),
+so both controls have returned. **Rename** has not: it still has no route, so it
+stays absent rather than coming back as a button that lies.
+
+
+## Addendum — invitations, answered
+
+Phase 11 left invitations unbuilt because they need outbound email, and said a
+copy-this-link workaround "would be a different feature wearing their labels".
+
+An invite *link* is that different feature, built honestly and labelled as what
+it is: "Invite people" makes a link, the dialog says plainly that nothing is
+emailed, and the invitee sets their own password. It is not an email invitation
+with the email removed — it is the model Slack and Discord use by design.
+"Resend invitation" still does not exist, because there is still nothing to
+resend.
+
+## Addendum — multiple workspaces
+
+The deployment was single-tenant by decision: sign-in resolved against one
+fixed workspace. The owner asked for more than one, and chose the rules:
+
+- **Only owners and administrators create workspaces.** This is the
+  `p_workspace_create` permission (migration 0008), which the Owner and
+  Administrator roles hold.
+- **Accounts are separate per workspace, not one login shared across them.**
+  Creating a workspace gives the creator a new account there, starting with
+  the same email and password. From then on the two are independent.
+  Switching asks for the other account's password and ends the current
+  session. A sign-in whose password matches several accounts asks which
+  workspace to enter.
+
+Making a second workspace reachable turned up twenty cross-workspace gaps,
+all fixed and each tested. They had never mattered, because nobody had ever
+been outside Northwind.
+
+## Addendum — password reset and retention
+
+"Send password reset" was deferred because it needs email. An administrator
+can now reset a password, and that is the answer for a system with no mail
+transport: the reset produces a temporary password shown once, for the
+administrator to pass on, and ends the person's sessions. It is not a reset
+*link*, and the interface does not pretend to send anything. Who may reset whom
+is enforced on the server (an administrator cannot reset an owner).
+
+The "Message retention" control used to save a value nothing acted on, which
+made it a control that lied. It now deletes, permanently, and asks first —
+showing how many messages are due. `fileRetentionDays` has no control and is not
+enforced.
+
+## Addendum — two-factor authentication: deleted
+
+Three controls claimed two-factor authentication — a "2FA" column on the Users
+page, a "Require two-factor" switch, and a dashboard warning that it was not
+enforced. There is no way to enrol or to check a code, so the column showed seed
+data, the switch reported success without saving, and the warning pointed at a
+switch that could not work. All three were deleted, on the same rule as the rest
+of this document: a control that lies is worse than none. If two-factor is built
+it should arrive with its controls, not before them.
+
+## Addendum — the Authentication page
+
+Most of this page reported success without saving anything. What remains is
+what is true:
+
+- **Kept, and now real:** session length. It was stored and ignored; new
+  sign-ins now get it.
+- **Kept, as a statement:** the 12-character minimum. It is fixed in the server,
+  so it is shown, not offered.
+- **Deleted:** the sign-in provider switches (Okta, Google and the rest), *Re-run
+  sync*, and the SCIM endpoint. Nothing behind them existed — the provider
+  toggle endpoint was a documented no-op that answered success. If single
+  sign-on is built, its controls arrive with it.
+

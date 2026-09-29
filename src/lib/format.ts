@@ -40,7 +40,11 @@ export function formatDayDivider(iso: string, locale = "en-US"): string {
 
 export function formatRelative(iso: string, locale = "en-US"): string {
   const then = new Date(iso).getTime();
-  const seconds = Math.round((Date.now() - then) / 1000);
+  // Signed: negative in the past, positive in the future. This used to assume
+  // the past, so any future time — an expiry — came out as "just now".
+  const offset = Math.round((then - Date.now()) / 1000);
+  const seconds = Math.abs(offset);
+  const direction = Math.sign(offset) || -1;
   if (seconds < 45) return "just now";
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "narrow" });
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -52,9 +56,14 @@ export function formatRelative(iso: string, locale = "en-US"): string {
     ["minute", 60],
   ];
   for (const [unit, secondsInUnit] of units) {
-    if (seconds >= secondsInUnit) return rtf.format(-Math.floor(seconds / secondsInUnit), unit);
+    if (seconds >= secondsInUnit) return rtf.format(direction * Math.floor(seconds / secondsInUnit), unit);
   }
-  return rtf.format(-seconds, "second");
+  return rtf.format(direction * seconds, "second");
+}
+
+/** "1 member", "52 members". */
+export function formatMembers(count: number): string {
+  return `${count.toLocaleString()} ${count === 1 ? "member" : "members"}`;
 }
 
 export function formatCount(value: number, max = 99): string {

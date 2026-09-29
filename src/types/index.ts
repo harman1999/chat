@@ -113,6 +113,10 @@ export interface Workspace {
   slug: string;
   /** Short mark shown in the workspace switcher. */
   initials: string;
+  /** Uploaded logo, or null to show the default mark. */
+  logoUrl: string | null;
+  /** The one signed in to. Others are separate accounts, reached by switching. */
+  isCurrent: boolean;
   plan: "free" | "business" | "enterprise";
   memberCount: number;
   unreadCount: number;
@@ -308,6 +312,8 @@ export interface ApiError {
   code: string;
   message: string;
   status: number;
+  /** The whole error body, for the few errors that carry more — the sign-in chooser. */
+  details?: Record<string, unknown>;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -320,7 +326,6 @@ export interface AdminUser extends User {
   status: AccountStatus;
   roleId: ID;
   lastSignInAt: string | null;
-  twoFactorEnabled: boolean;
   createdAt: string;
   messageCount: number;
 }
@@ -332,12 +337,16 @@ export interface Permission {
   description: string;
 }
 
+/** The built-in roles every workspace has. Custom roles have no kind. */
+export type RoleKind = "owner" | "admin" | "member" | "guest";
+
 export interface Role {
   id: ID;
   name: string;
   description: string;
   /** System roles cannot be renamed or deleted. */
   isSystem: boolean;
+  kind: RoleKind | null;
   memberCount: number;
   permissionIds: ID[];
 }
@@ -354,18 +363,6 @@ export interface AuditLogEntry {
   ipAddress: string;
   createdAt: string;
   severity: AuditSeverity;
-}
-
-export type AuthProviderKind = "password" | "saml" | "oidc" | "oauth" | "scim";
-
-export interface AuthProvider {
-  id: ID;
-  name: string;
-  kind: AuthProviderKind;
-  description: string;
-  isEnabled: boolean;
-  isConfigured: boolean;
-  lastSyncAt: string | null;
 }
 
 export interface StorageBucket {
@@ -439,7 +436,6 @@ export interface SystemSettings {
   messageRetentionDays: number | null;
   fileRetentionDays: number | null;
   maxUploadMb: number;
-  requireTwoFactor: boolean;
   sessionTimeoutHours: number;
 }
 
@@ -556,4 +552,27 @@ export interface SlashCommandResult {
   /** "ephemeral" is shown only to the caller; "in_channel" is posted. */
   responseType: "ephemeral" | "in_channel";
   text: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Invite links                                                              */
+/* -------------------------------------------------------------------------- */
+
+/** An active invite link, as its creator sees it. The token itself is shown once. */
+export interface InviteLink {
+  id: ID;
+  tokenPrefix: string;
+  createdAt: string;
+  expiresAt: string;
+  /** null means unlimited until it expires. */
+  maxUses: number | null;
+  useCount: number;
+  createdByName: string;
+}
+
+/** What someone opening an invite link sees before joining. */
+export interface InvitePreview {
+  workspaceName: string;
+  invitedByName: string;
+  expiresAt: string;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { UnreadBadge, UserAvatar } from "@/components/common";
-import { useUserMap } from "@/hooks";
+import { useCurrentUserId, useUserMap } from "@/hooks";
 import { useUIStore, useWorkspaceStore } from "@/store";
 import type { Channel, User } from "@/types";
 import { SidebarItem } from "./sidebar-item";
@@ -26,6 +26,7 @@ export function DirectMessageItem({
   const setActive = useWorkspaceStore((state) => state.setActiveConversation);
   const closeDrawer = useUIStore((state) => state.setSidebarDrawerOpen);
   const usersById = useUserMap();
+  const currentUserId = useCurrentUserId();
 
   const participants = (conversation.participantIds ?? [])
     .map((id) => usersById[id])
@@ -49,7 +50,15 @@ export function DirectMessageItem({
           />
         )
       }
-      label={primary && !isGroup ? primary.displayName : conversation.name}
+      label={
+        primary && !isGroup
+          ? // A note-to-self is named after you, so without this it reads as a
+            // conversation with someone who shares your name.
+            primary.id === currentUserId
+            ? `${primary.displayName} (you)`
+            : primary.displayName
+          : conversation.name
+      }
       isActive={activeId === conversation.id}
       isUnread={hasUnread}
       isCollapsed={isCollapsed}

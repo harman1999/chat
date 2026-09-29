@@ -1,7 +1,6 @@
 import type {
   AdminUser,
   AuditLogEntry,
-  AuthProvider,
   Channel,
   DailyMetric,
   ID,
@@ -19,7 +18,6 @@ import type {
   SystemSettings,
   WorkspaceStats,
 } from "@/types";
-import { authProviders } from "@/config";
 import {
   adminUsers,
   auditLog,
@@ -78,6 +76,12 @@ export const adminService = {
   }): Promise<AdminUser> {
     if (USE_MOCK_TRANSPORT) return mockResolve(adminUsers[0], 320);
     return request<AdminUser>("/admin/users", { method: "POST", body: input });
+  },
+
+  /** Sets a temporary password and ends their sessions. The password is returned once. */
+  async resetPassword(userId: ID): Promise<{ password: string; username: string }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ password: "mock-temporary-pw", username: "mock" }, 300);
+    return request<{ password: string; username: string }>(`/admin/users/${userId}/password`, { method: "POST" });
   },
 
   async setUserStatus(userId: ID, status: AdminUser["status"]): Promise<void> {
@@ -226,6 +230,31 @@ export const adminService = {
     return request<Role[]>("/admin/roles");
   },
 
+  async createRole(input: {
+    name: string;
+    description?: string;
+    copyFromRoleId?: ID | null;
+  }): Promise<Role> {
+    return request<Role>("/admin/roles", { method: "POST", body: input });
+  },
+
+  /** Its members move to Member; the result says how many. */
+  async deleteRole(roleId: ID): Promise<{ movedMembers: number; movedTo: ID }> {
+    return request<{ movedMembers: number; movedTo: ID }>(`/admin/roles/${roleId}`, {
+      method: "DELETE",
+    });
+  },
+
+  /** Saves matrix edits together; either all land or none do. */
+  async savePermissionChanges(
+    changes: { roleId: ID; permissionId: ID; granted: boolean }[],
+  ): Promise<{ applied: number }> {
+    return request<{ applied: number }>("/admin/permissions", {
+      method: "PUT",
+      body: { changes },
+    });
+  },
+
   async listPermissions(): Promise<Permission[]> {
     if (USE_MOCK_TRANSPORT) return mockResolve(permissions, 200);
     return request<Permission[]>("/admin/permissions");
@@ -236,16 +265,6 @@ export const adminService = {
     return request<void>(`/admin/roles/${roleId}/permissions/${permissionId}`, {
       method: granted ? "PUT" : "DELETE",
     });
-  },
-
-  async listAuthProviders(): Promise<AuthProvider[]> {
-    if (USE_MOCK_TRANSPORT) return mockResolve(authProviders, 220);
-    return request<AuthProvider[]>("/admin/auth/providers");
-  },
-
-  async setAuthProviderEnabled(id: ID, isEnabled: boolean): Promise<void> {
-    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 260);
-    return request<void>(`/admin/auth/providers/${id}`, { method: "PATCH", body: { isEnabled } });
   },
 
   async storage(): Promise<StorageBucket[]> {
@@ -261,6 +280,23 @@ export const adminService = {
   async updateSettings(patch: Partial<SystemSettings>): Promise<void> {
     if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 300);
     return request<void>("/admin/settings", { method: "PATCH", body: patch });
+  },
+
+  /** How many messages a retention of this many days would delete right now. */
+  async retentionPreview(days: number): Promise<{ days: number; messages: number }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ days, messages: 0 }, 200);
+    return request<{ days: number; messages: number }>(`/admin/retention?days=${days}`);
+  },
+
+  /** Replaces the workspace logo with this image. Resolves to its new URL. */
+  async uploadLogo(file: File): Promise<{ logoUrl: string }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ logoUrl: URL.createObjectURL(file) }, 300);
+    return request<{ logoUrl: string }>("/admin/workspace/logo", { method: "PUT", body: file });
+  },
+
+  async removeLogo(): Promise<void> {
+    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 200);
+    return request<void>("/admin/workspace/logo", { method: "DELETE" });
   },
 
   async auditLog(): Promise<AuditLogEntry[]> {

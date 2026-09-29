@@ -196,19 +196,24 @@ export const messagesRepo = {
       );
 
       // Mentions are resolved server-side: the client sends text, never ids it
-      // could forge.
+      // could forge. Usernames are unique only per workspace, so they resolve
+      // in the channel's — "@alice" must not notify every Alice everywhere.
       await client.query(
         `INSERT INTO message_mentions (message_id, user_id)
          SELECT $1, u.id FROM users u
          WHERE u.username = ANY($2::text[])
+           AND u.workspace_id = (SELECT workspace_id FROM channels WHERE id = $3)
          ON CONFLICT DO NOTHING`,
-        [id, input.mentionedUsernames ?? []],
+        [id, input.mentionedUsernames ?? [], input.channelId],
       );
 
       if (input.attachmentIds?.length) {
+        // Only the author's own uploads that are not yet on a message — otherwise
+        // naming someone else's attachment id would move their file here.
         await client.query(
-          `UPDATE attachments SET message_id = $1, channel_id = $2 WHERE id = ANY($3::text[])`,
-          [id, input.channelId, input.attachmentIds],
+          `UPDATE attachments SET message_id = $1, channel_id = $2
+            WHERE id = ANY($3::text[]) AND uploaded_by = $4 AND message_id IS NULL`,
+          [id, input.channelId, input.attachmentIds, input.authorId],
         );
       }
 

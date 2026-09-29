@@ -6,4 +6,3 @@
  * languages is not workspace content — so they belong in the bundle.
  */
 export { LANGUAGES, TIMEZONES, STATUS_PRESETS, defaultPreferences } from "./preferences";
-export { authProviders } from "./auth-providers";

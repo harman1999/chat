@@ -33,6 +33,12 @@ async function main() {
   const client = await pool.connect();
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
+  const withoutName = (settings: typeof systemSettings) => {
+    const rest: Partial<typeof systemSettings> = { ...settings };
+    delete rest.workspaceName;
+    return rest;
+  };
+
   try {
     await client.query("BEGIN");
 
@@ -50,19 +56,20 @@ async function main() {
           workspace.slug,
           workspace.initials,
           workspace.plan,
-          JSON.stringify(workspace.id === WORKSPACE_ID ? systemSettings : {}),
+          // The name lives in its own column (migration 0007), not in settings.
+          JSON.stringify(workspace.id === WORKSPACE_ID ? withoutName(systemSettings) : {}),
         ],
       );
     }
 
     for (const role of roles) {
       await client.query(
-        `INSERT INTO roles (id, workspace_id, name, description, is_system)
-         VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO roles (id, workspace_id, name, description, is_system, kind)
+         VALUES ($1,$2,$3,$4,$5,$6)
          ON CONFLICT (id) DO UPDATE
            SET name = EXCLUDED.name, description = EXCLUDED.description,
-               is_system = EXCLUDED.is_system`,
-        [role.id, WORKSPACE_ID, role.name, role.description, role.isSystem],
+               is_system = EXCLUDED.is_system, kind = EXCLUDED.kind`,
+        [role.id, WORKSPACE_ID, role.name, role.description, role.isSystem, role.kind],
       );
     }
 
@@ -77,7 +84,10 @@ async function main() {
       );
     }
 
-    await client.query("DELETE FROM role_permissions");
+    // Only the seeded roles: other workspaces' permissions are theirs.
+    await client.query(`DELETE FROM role_permissions WHERE role_id = ANY($1::text[])`, [
+      roles.map((role) => role.id),
+    ]);
     for (const role of roles) {
       for (const permissionId of role.permissionIds) {
         await client.query(
@@ -95,17 +105,16 @@ async function main() {
            id, workspace_id, username, display_name, full_name, email, password_hash,
            title, department, timezone, avatar_color, presence,
            status_emoji, status_text, status_expires_at,
-           role, role_id, account_status, is_bot, two_factor_enabled,
+           role, role_id, account_status, is_bot,
            last_active_at, last_sign_in_at, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
          ON CONFLICT (id) DO UPDATE SET
            display_name = EXCLUDED.display_name, full_name = EXCLUDED.full_name,
            email = EXCLUDED.email, title = EXCLUDED.title,
            department = EXCLUDED.department, presence = EXCLUDED.presence,
            status_emoji = EXCLUDED.status_emoji, status_text = EXCLUDED.status_text,
            role = EXCLUDED.role, role_id = EXCLUDED.role_id,
-           account_status = EXCLUDED.account_status,
-           two_factor_enabled = EXCLUDED.two_factor_enabled`,
+           account_status = EXCLUDED.account_status`,
         [
           user.id, WORKSPACE_ID, user.username, user.displayName, user.fullName,
           user.email, passwordHash, user.title, user.department, user.timezone,
@@ -113,7 +122,7 @@ async function main() {
           user.customStatus?.emoji ?? null,
           user.customStatus?.text ?? null,
           user.customStatus?.expiresAt ?? null,
-          user.role, user.roleId, user.status, user.isBot, user.twoFactorEnabled,
+          user.role, user.roleId, user.status, user.isBot,
           user.lastActiveAt, user.lastSignInAt, user.createdAt,
         ],
       );

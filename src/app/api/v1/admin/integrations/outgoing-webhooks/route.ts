@@ -26,6 +26,9 @@ export const POST = handler(async (request: Request) => {
     throw error;
   }
 
+  const foreign = await integrationsRepo.foreignReference(workspaceId, body);
+  if (foreign) return problem(404, "not_found", `That ${foreign} is not in this workspace`);
+
   const created = await integrationsRepo.createOutgoing({
     workspaceId,
     channelId: body.channelId,

@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UnreadBadge } from "@/components/common";
-import { useMentions, useThreadUnreadTotal } from "@/hooks";
+import { useThreadUnreadTotal, useUnreadMentionTotal } from "@/hooks";
 import { useUIStore, useWorkspaceStore, type NavSection } from "@/store";
 import { SidebarItem } from "./sidebar-item";
 
@@ -39,7 +39,7 @@ export function SidebarNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
   const setNavSection = useWorkspaceStore((state) => state.setNavSection);
   const setSearchOpen = useUIStore((state) => state.setSearchOpen);
   const unreadThreads = useThreadUnreadTotal();
-  const { data: mentions } = useMentions();
+  const unreadMentions = useUnreadMentionTotal();
 
   return (
     <nav aria-label="Workspace navigation" className="space-y-px">
@@ -49,7 +49,7 @@ export function SidebarNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
           item.id === "threads"
             ? unreadThreads
             : item.id === "mentions"
-              ? mentions?.length ?? 0
+              ? unreadMentions
               : item.badge;
         return (
           <SidebarItem

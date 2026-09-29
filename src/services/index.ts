@@ -3,6 +3,7 @@ export { authService } from "./authService";
 export { commandService } from "./commandService";
 export { channelService } from "./channelService";
 export { fileService } from "./fileService";
+export { inviteService } from "./inviteService";
 export { messageService } from "./messageService";
 export { notificationService } from "./notificationService";
 export { searchService } from "./searchService";

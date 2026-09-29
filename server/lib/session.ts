@@ -31,9 +31,31 @@ export interface SessionContext {
  * request. Redis holding only the user id means a revoked row disappears from
  * both as soon as the key is dropped.
  */
-export async function createSession(userId: string, request?: Request): Promise<string> {
+/**
+ * How long a new sign-in for this person lasts, in seconds.
+ *
+ * The workspace chooses (Admin → Authentication, stored as sessionTimeoutHours);
+ * the environment's value is only the fallback for a workspace that never set
+ * one. It applies to sign-ins from now on — a session already issued keeps the
+ * expiry it was given.
+ */
+export async function sessionLifetimeSeconds(userId: string): Promise<number> {
+  const row = await queryOne<{ hours: string | null }>(
+    `SELECT w.settings->>'sessionTimeoutHours' AS hours
+       FROM users u JOIN workspaces w ON w.id = u.workspace_id WHERE u.id = $1`,
+    [userId],
+  );
+  const hours = Number(row?.hours);
+  return Number.isInteger(hours) && hours >= 1 && hours <= 8_760 ? hours * 3_600 : env.sessionTtlSeconds;
+}
+
+export async function createSession(
+  userId: string,
+  request?: Request,
+): Promise<{ sessionId: string; expiresAt: Date; lifetimeSeconds: number }> {
   const sessionId = randomUUID();
-  const expiresAt = new Date(Date.now() + env.sessionTtlSeconds * 1000);
+  const lifetimeSeconds = await sessionLifetimeSeconds(userId);
+  const expiresAt = new Date(Date.now() + lifetimeSeconds * 1000);
 
   const agent = request?.headers.get("user-agent") ?? "";
   const isMobile = /iPhone|Android|iPad/i.test(agent);
@@ -53,10 +75,40 @@ export async function createSession(userId: string, request?: Request): Promise<
     ],
   );
 
-  await redis.set(sessionKey(sessionId), userId, "EX", env.sessionTtlSeconds);
+  await redis.set(sessionKey(sessionId), userId, "EX", lifetimeSeconds);
   await query(`UPDATE users SET last_sign_in_at = now() WHERE id = $1`, [userId]);
 
-  return sessionId;
+  return { sessionId, expiresAt, lifetimeSeconds };
+}
+
+/**
+ * Starts a session for this account and sets the cookie. With `replacing`,
+ * the caller's current session ends too — switching workspace or moving into
+ * a new one must not leave the old sign-in live behind the new cookie.
+ */
+export async function signInAs(
+  userId: string,
+  request: Request,
+  replacing?: string,
+): Promise<{ sessionId: string; expiresAt: Date }> {
+  const { sessionId, expiresAt, lifetimeSeconds } = await createSession(userId, request);
+  if (replacing) await destroySession(replacing);
+  const store = await cookies();
+  store.set(env.sessionCookie, sessionId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: lifetimeSeconds,
+  });
+  return { sessionId, expiresAt };
+}
+
+/** Ends every session a person has, on every device. */
+export async function revokeAllSessions(userId: string): Promise<number> {
+  const revoked = await query<{ id: string }>(`DELETE FROM sessions WHERE user_id = $1 RETURNING id`, [userId]);
+  if (revoked.length) await redis.del(...revoked.map((session) => sessionKey(session.id)));
+  return revoked.length;
 }
 
 export async function destroySession(sessionId: string): Promise<void> {
@@ -86,6 +138,9 @@ async function getTokenSession(): Promise<SessionContext | null> {
       `SELECT ${USER_COLUMNS}, u.workspace_id, t.id AS token_id
        FROM oauth_access_tokens t
        JOIN users u ON u.id = t.user_id
+       -- Never across workspaces, whatever row exists: the app must be one of
+       -- the user's own workspace.
+       JOIN oauth_apps a ON a.id = t.app_id AND a.workspace_id = u.workspace_id
        WHERE t.token_hash = $1 AND t.revoked_at IS NULL AND t.expires_at > now()
          AND u.account_status = 'active'`,
       [tokenHash],
@@ -106,7 +161,9 @@ async function getTokenSession(): Promise<SessionContext | null> {
   const row = await queryOne<UserRow & { workspace_id: string; token_id: string }>(
     `SELECT ${USER_COLUMNS}, u.workspace_id, t.id AS token_id
      FROM integration_tokens t
-     JOIN users u ON u.id = t.user_id
+     -- A token acts only as a bot of the workspace it was issued in. Checked
+     -- here as well as at issue, so no bad row can ever sign anyone in.
+     JOIN users u ON u.id = t.user_id AND u.workspace_id = t.workspace_id AND u.is_bot
      WHERE t.token_hash = $1 AND t.revoked_at IS NULL
        AND u.account_status = 'active'`,
     [tokenHash],
@@ -136,13 +193,16 @@ export async function getSession(): Promise<SessionContext | null> {
 
   if (!userId) {
     // Redis is a cache, not the source of truth — fall back and repopulate.
-    const row = await queryOne<{ user_id: string }>(
-      `SELECT user_id FROM sessions WHERE id = $1 AND expires_at > now()`,
+    const row = await queryOne<{ user_id: string; remaining: string }>(
+      `SELECT user_id, extract(epoch FROM expires_at - now())::int AS remaining
+         FROM sessions WHERE id = $1 AND expires_at > now()`,
       [sessionId],
     );
     if (!row) return null;
     userId = row.user_id;
-    await redis.set(sessionKey(sessionId), userId, "EX", env.sessionTtlSeconds);
+    // For what is left of it — not a fresh full lifetime, which would quietly
+    // extend a session past the expiry it was issued with.
+    await redis.set(sessionKey(sessionId), userId, "EX", Math.max(1, Number(row.remaining)));
   }
 
   const user = await queryOne<UserRow & { workspace_id: string }>(

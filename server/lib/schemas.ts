@@ -14,6 +14,20 @@ export const loginSchema = z.object({
   email: z.string().trim().email().max(320),
   // Not `.min()`: the sign-in path must not disclose the password policy.
   password: z.string().min(1).max(512),
+  /** Which workspace's account, by slug — needed only when the email has several. */
+  workspace: z.string().trim().min(1).max(60).optional(),
+});
+
+export const createWorkspaceSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  /** The creator's current password: starting a workspace is an account-level act. */
+  password: z.string().min(1).max(512),
+});
+
+export const switchWorkspaceSchema = z.object({
+  workspaceId: z.string().min(1).max(200),
+  /** The password of the account in the target workspace — a separate account. */
+  password: z.string().min(1).max(512),
 });
 
 export const messageBodySchema = z.object({
@@ -54,6 +68,12 @@ export const profileSchema = z.object({
 
 export const emailSchema = z.object({
   email: z.string().trim().email().max(320),
+});
+
+export const emailChangeSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(320),
+  /** The current password: whoever controls the address controls sign-in. */
+  password: z.string().min(1).max(512),
 });
 
 export const passwordSchema = z.object({
@@ -126,10 +146,16 @@ export const systemSettingsSchema = z
     allowPublicInvites: z.boolean(),
     restrictSignupDomain: z.boolean(),
     signupDomains: z.array(z.string().trim().min(1).max(253)).max(50),
-    messageRetentionDays: z.number().int().min(0).max(36_500).nullable(),
+    // Deleting is permanent, so nothing shorter than 30 days can be set: null or
+    // 0 keeps everything, and a typo like 1 must not wipe a workspace.
+    messageRetentionDays: z
+      .number()
+      .int()
+      .max(36_500)
+      .refine((days) => days === 0 || days >= 30, "Use 0 to keep forever, or at least 30 days")
+      .nullable(),
     fileRetentionDays: z.number().int().min(0).max(36_500).nullable(),
     maxUploadMb: z.number().int().min(1).max(5_000),
-    requireTwoFactor: z.boolean(),
     sessionTimeoutHours: z.number().int().min(1).max(8_760),
   })
   .partial();
@@ -276,4 +302,35 @@ export const incomingWebhookPayloadSchema = z.object({
   text: z.string().trim().min(1).max(4_000),
   /** Overrides the bot's name for this message only. */
   username: z.string().trim().max(80).optional(),
+});
+
+/** Opening a direct message needs only the other person. */
+export const openDirectMessageSchema = z.object({ userId: id });
+
+export const createRoleSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(200).optional().default(""),
+  /** Start from this role's permissions rather than from none. */
+  copyFromRoleId: id.nullable().optional().default(null),
+});
+
+/** Edits to the role × permission matrix, applied together by one Save. */
+export const permissionChangesSchema = z.object({
+  changes: z
+    .array(z.object({ roleId: id, permissionId: id, granted: z.boolean() }))
+    .min(1)
+    .max(500),
+});
+
+export const createInviteSchema = z.object({
+  expiresInDays: z.union([z.literal(1), z.literal(7), z.literal(30)]).default(7),
+  /** null for unlimited uses until it expires. */
+  maxUses: z.number().int().min(1).max(1000).nullable().default(null),
+});
+
+/** Joining through an invite link — the invitee chooses their own password. */
+export const acceptInviteSchema = z.object({
+  fullName: z.string().trim().min(1).max(120),
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(12).max(200),
 });

@@ -32,9 +32,18 @@ export function ThreadCard({
 
   return (
     <article
+      // The whole card opens the thread. Only the small "N replies" link did, so
+      // clicking anywhere else appeared to do nothing. That link stays as the
+      // keyboard route. Links and buttons inside the card keep their own action,
+      // and dragging to select text is not a click on the card.
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("a, button")) return;
+        if (window.getSelection()?.toString()) return;
+        onOpen();
+      }}
       className={cn(
-        "rounded-lg border bg-surface transition-colors",
-        hasUnread ? "border-accent/35" : "border-border hover:border-border-strong",
+        "cursor-pointer rounded-lg border bg-surface transition-colors",
+        hasUnread ? "border-accent/35 hover:border-accent/60" : "border-border hover:border-border-strong",
       )}
     >
       <header className="flex items-center gap-1.5 border-b border-border px-3 py-2">

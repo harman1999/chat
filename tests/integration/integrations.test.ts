@@ -38,6 +38,11 @@ describe("integrations", () => {
   let member: Client;
   let receiver: Receiver;
   const cleanupUsers: string[] = [];
+  // The suite posts real messages into #general to trigger webhooks. It shares a
+  // database with whoever is using the app, so it removes them afterwards: only
+  // these exact texts, only from the owner, only if posted during this run.
+  const startedAt = new Date();
+  const POSTED = ["deploy the release branch", "nothing relevant here"];
 
   beforeAll(async () => {
     await assertServerRunning();
@@ -47,6 +52,11 @@ describe("integrations", () => {
   });
 
   afterAll(async () => {
+    await db().query(
+      `DELETE FROM messages WHERE channel_id = 'ch_general' AND author_id = 'u_harman'
+         AND body = ANY($1::text[]) AND created_at >= $2`,
+      [POSTED, startedAt],
+    );
     receiver.server.close();
     if (cleanupUsers.length) {
       await db().query(`DELETE FROM users WHERE id = ANY($1::text[])`, [cleanupUsers]);

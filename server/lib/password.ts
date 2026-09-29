@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
@@ -28,4 +29,14 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const expected = Buffer.from(hashHex, "hex");
   if (derived.length !== expected.length) return false;
   return timingSafeEqual(derived, expected);
+}
+
+/**
+ * A random password for an administrator to hand to someone, 16 characters
+ * (about 93 bits). Left out: characters that look alike (0/O, 1/l/I), because
+ * it is read aloud or retyped, not pasted from an email.
+ */
+export function generateTemporaryPassword(): string {
+  const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 16 }, () => alphabet[randomInt(alphabet.length)]).join("");
 }

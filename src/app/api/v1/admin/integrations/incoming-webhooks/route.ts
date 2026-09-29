@@ -22,7 +22,8 @@ export const POST = handler(async (request: Request) => {
   const channel = await channelsRepo.get(body.channelId, user.id, workspaceId);
   if (!channel) return problem(404, "not_found", "Channel not found");
 
-  const bot = await usersRepo.get(body.botUserId);
+  // One of this workspace's bots only.
+  const bot = await usersRepo.get(body.botUserId, workspaceId);
   if (!bot?.isBot) return problem(422, "not_a_bot", "Messages must be posted by a bot account");
 
   // The bot has to be in the channel, because posting is the same code path any

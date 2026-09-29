@@ -43,11 +43,18 @@ const CHANNEL_SELECT = `
               AND m.created_at > cm.last_read_at) AS mention_count,
          (SELECT array_agg(cm2.user_id ORDER BY cm2.joined_at) FROM channel_members cm2
             WHERE cm2.channel_id = c.id) AS member_ids,
-         (SELECT array_agg(cm3.user_id) FROM channel_members cm3
-            WHERE cm3.channel_id = c.id AND cm3.user_id <> $2) AS participant_ids,
-         (SELECT string_agg(u2.display_name, ', ' ORDER BY u2.display_name)
-            FROM channel_members cm4 JOIN users u2 ON u2.id = cm4.user_id
-            WHERE cm4.channel_id = c.id AND cm4.user_id <> $2) AS dm_name
+         -- A conversation with yourself has nobody "else" in it, so both of
+         -- these would be null. They fall back to the caller, which gives a
+         -- note-to-self your own name and avatar instead of a blank row.
+         COALESCE(
+           (SELECT array_agg(cm3.user_id) FROM channel_members cm3
+              WHERE cm3.channel_id = c.id AND cm3.user_id <> $2),
+           ARRAY[$2::text]) AS participant_ids,
+         COALESCE(
+           (SELECT string_agg(u2.display_name, ', ' ORDER BY u2.display_name)
+              FROM channel_members cm4 JOIN users u2 ON u2.id = cm4.user_id
+              WHERE cm4.channel_id = c.id AND cm4.user_id <> $2),
+           (SELECT u5.display_name FROM users u5 WHERE u5.id = $2)) AS dm_name
   FROM channels c
   JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
 `;
@@ -98,6 +105,72 @@ export const channelsRepo = {
       [workspaceId, userId],
     );
     return rows.map((row) => mapChannel(row, workspaceId));
+  },
+
+  /**
+   * Opens the direct message between two people, creating it only if it does
+   * not exist.
+   *
+   * Idempotent by necessity: two people clicking each other at the same moment
+   * must land in one conversation, not two halves of a split history. The
+   * lookup matches on *exactly* these two members rather than "contains both",
+   * so a group DM that happens to include them is never mistaken for their
+   * private one.
+   */
+  async openDirect(
+    workspaceId: string,
+    userId: string,
+    otherUserId: string,
+  ): Promise<Channel | null> {
+    // One member when it is a note to yourself, two otherwise.
+    const memberIds = [...new Set([userId, otherUserId])];
+
+    // Matches on *exactly* these members: every member is one of them, and
+    // there are exactly as many as expected. So a group DM that includes both
+    // is never mistaken for their private one, and your note-to-self is never
+    // mistaken for a conversation you merely belong to.
+    const existing = await queryOne<{ id: string }>(
+      `SELECT c.id
+         FROM channels c
+         JOIN channel_members m ON m.channel_id = c.id
+        WHERE c.workspace_id = $1 AND c.kind = 'dm'
+        GROUP BY c.id
+       HAVING count(*) = $3
+          AND bool_and(m.user_id = ANY($2::text[]))
+        LIMIT 1`,
+      [workspaceId, memberIds, memberIds.length],
+    );
+    if (existing) return channelsRepo.get(existing.id, userId, workspaceId);
+
+    const id = `ch_${randomUUID()}`;
+    await transaction(async (client) => {
+      await client.query(
+        `INSERT INTO channels (id, workspace_id, kind, name, purpose, description, member_count, created_by)
+         VALUES ($1,$2,'dm','','','',0,$3)`,
+        [id, workspaceId, userId],
+      );
+      // member_count follows from the trigger in migration 0003.
+      await client.query(
+        // Matches the directory the picker is built from (`usersRepo.list`),
+        // which excludes only deactivated accounts. Requiring 'active' here
+        // meant the dialog offered people — anyone still `invited` — that it
+        // then refused with "not available in this workspace".
+        `INSERT INTO channel_members (channel_id, user_id, last_read_at)
+         SELECT $1, u.id, now() FROM users u
+          WHERE u.id = ANY($2::text[]) AND u.workspace_id = $3
+            AND u.account_status <> 'deactivated'`,
+        [id, memberIds, workspaceId],
+      );
+    });
+
+    // A deactivated or absent counterpart inserts fewer members than asked for
+    // — a conversation with nobody on the other end.
+    const created = await channelsRepo.get(id, userId, workspaceId);
+    if (created && created.memberCount < memberIds.length) {
+      await query(`DELETE FROM channels WHERE id = $1`, [id]);
+      return null;
+    }
+    return created;
   },
 
   async get(channelId: string, userId: string, workspaceId: string): Promise<Channel | null> {
@@ -185,7 +258,14 @@ export const channelsRepo = {
     return Boolean(row);
   },
 
-  /** Returns the ids actually added, skipping people already in the channel. */
+  /**
+   * Returns the ids actually added, skipping people already in the channel.
+   *
+   * Only people from the channel's own workspace, and only into a real
+   * channel: membership is what every read check trusts, so adding someone
+   * from elsewhere would hand them this channel. A DM's members are fixed when
+   * it is opened, so it is never added to here.
+   */
   async addMembers(channelId: string, userIds: string[]): Promise<string[]> {
     if (userIds.length === 0) return [];
 
@@ -194,6 +274,9 @@ export const channelsRepo = {
         `INSERT INTO channel_members (channel_id, user_id, last_read_at)
          SELECT $1, u.id, now() FROM users u
          WHERE u.id = ANY($2::text[]) AND u.account_status = 'active'
+           AND u.workspace_id = (
+             SELECT c.workspace_id FROM channels c
+              WHERE c.id = $1 AND c.kind IN ('public', 'private'))
          ON CONFLICT (channel_id, user_id) DO NOTHING
          RETURNING user_id`,
         [channelId, userIds],
@@ -218,9 +301,22 @@ export const channelsRepo = {
     await query(`UPDATE channels SET is_archived = $2 WHERE id = $1`, [channelId, isArchived]);
   },
 
+  /**
+   * Marks a conversation read for one person: everything up to now, and the
+   * notifications it produced. Both are the caller's own rows only, so it
+   * cannot be used on someone else's read state.
+   *
+   * Notifications go with it because a mention is shown twice — as a badge on
+   * the channel and as an entry in the bell — and reading the channel and
+   * still being told about it would be the same unread message counted twice.
+   */
   async markRead(channelId: string, userId: string): Promise<void> {
     await query(
       `UPDATE channel_members SET last_read_at = now() WHERE channel_id = $1 AND user_id = $2`,
+      [channelId, userId],
+    );
+    await query(
+      `UPDATE notifications SET is_read = true WHERE channel_id = $1 AND user_id = $2 AND NOT is_read`,
       [channelId, userId],
     );
   },

@@ -1,3 +1,5 @@
+import type * as React from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,5 +42,29 @@ export function AppLogoMark({ className }: { className?: string }) {
     >
       <AppLogo className="size-4" />
     </span>
+  );
+}
+
+/**
+ * A workspace's own logo, or — until one is uploaded, or if it fails to load —
+ * whatever `fallback` is: the Helix mark on the switcher, initials in lists.
+ */
+export function WorkspaceLogo({
+  logoUrl,
+  name,
+  className,
+  fallback,
+}: {
+  logoUrl: string | null;
+  name: string;
+  className?: string;
+  fallback: React.ReactNode;
+}) {
+  if (!logoUrl) return <>{fallback}</>;
+  return (
+    <Avatar className={cn("size-7 bg-surface-raised shadow-xs", className)}>
+      <AvatarImage src={logoUrl} alt={`${name} logo`} />
+      <AvatarFallback className="bg-transparent">{fallback}</AvatarFallback>
+    </Avatar>
   );
 }

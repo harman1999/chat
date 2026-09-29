@@ -53,6 +53,20 @@ export function useCurrentUserId(): ID | undefined {
 const EMPTY_CONVERSATIONS: Record<ID, Channel> = {};
 
 /**
+ * Unread mentions across every channel and direct message, for the Mentions
+ * badge. It used to show how many mentions exist in total, which can only ever
+ * go up. Reading a conversation zeroes its share, so this comes down as you
+ * read.
+ */
+export function useUnreadMentionTotal(): number {
+  const conversations = useConversationMap();
+  return useMemo(
+    () => Object.values(conversations).reduce((sum, item) => sum + item.mentionCount, 0),
+    [conversations],
+  );
+}
+
+/**
  * `id → Channel` across channels and DMs. Both queries are already warm from
  * the sidebar, so this costs nothing extra.
  */

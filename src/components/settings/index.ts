@@ -1,4 +1,3 @@
-export { AccountSettings } from "./account-settings";
 export { AppearanceSettings } from "./appearance-settings";
 export { NotificationSettings } from "./notification-settings";
 export { PreferencesSettings } from "./preferences-settings";

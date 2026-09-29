@@ -137,9 +137,11 @@ describe("hardening", () => {
         `SELECT count(*)::text AS n FROM audit_log WHERE action = 'user.role_changed'`,
       );
 
+      // A built-in role, which cannot be deleted. This used the seeded
+      // Moderator, and broke the day someone deleted Moderator through the UI.
       const response = await owner.fetch("/admin/users/u_bob/role", {
         method: "PUT",
-        body: JSON.stringify({ roleId: "role_moderator" }),
+        body: JSON.stringify({ roleId: "role_guest" }),
       });
       expect(response.status).toBe(204);
 
@@ -150,7 +152,7 @@ describe("hardening", () => {
          FROM audit_log WHERE action = 'user.role_changed'`,
       );
       expect(Number(after.rows[0].n)).toBe(Number(before.rows[0].n) + 1);
-      expect(after.rows[0].target).toContain("role_moderator");
+      expect(after.rows[0].target).toContain("role_guest");
 
       await db().query(`UPDATE users SET role_id = 'role_member' WHERE id = 'u_bob'`);
     });

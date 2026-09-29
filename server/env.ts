@@ -33,19 +33,6 @@ export const env = {
   /** Public origin, used to build webhook URLs shown to administrators. */
   publicUrl: process.env.PUBLIC_URL ?? "http://localhost:3000",
   wsPort: Number(process.env.WS_PORT ?? 3101),
-  /**
-   * The workspace a sign-in resolves against — and the only thing this value
-   * may be used for.
-   *
-   * Everywhere else the workspace comes from the caller's session, because the
-   * session knows it. Sign-in is the one point where no session exists yet, and
-   * the `users` unique constraints are per-workspace (`workspace_id, email`),
-   * so an address alone does not identify an account.
-   *
-   * This makes the deployment single-tenant by decision rather than by
-   * accident. Serving a second workspace means resolving it from the request —
-   * a subdomain, or a workspace field on the sign-in form — and changing
-   * nothing else, since no other code path reads this.
-   */
-  defaultWorkspaceId: "ws_northwind",
+  // No default workspace: sign-in finds the account by email across
+  // workspaces and asks which one when there are several (auth/login).
 };

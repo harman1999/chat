@@ -13,7 +13,10 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   return (
     <div className="flex min-h-[100dvh] flex-col bg-canvas">
       <header className="sticky top-0 z-10 flex h-[var(--spacing-topbar)] shrink-0 items-center gap-2 border-b border-border bg-surface px-3 sm:px-4">
-        <AppLogoMark />
+        {/* The logo is the way home, as it is everywhere else. */}
+        <Link href="/workspace" aria-label="Back to the chat" title="Back to the chat" className="shrink-0 rounded-md transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          <AppLogoMark />
+        </Link>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-tight text-fg">Settings</p>
           <p className="truncate text-2xs text-fg-subtle">{APP.name}</p>

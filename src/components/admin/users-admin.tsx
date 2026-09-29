@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Ban, Check, MoreHorizontal, ShieldCheck, ShieldOff, UserPlus } from "lucide-react";
+import { Ban, Check, KeyRound, MoreHorizontal, ShieldCheck, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { UserAvatar } from "@/components/common";
@@ -17,13 +17,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog, type ConfirmOptions } from "@/components/ui/confirm-dialog";
+import { useCurrentUserId } from "@/hooks";
 import { adminService } from "@/services";
+import { isApiError } from "@/services/http";
 import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { AccountStatus, AdminUser } from "@/types";
 import { AddMemberDialog } from "./add-member-dialog";
 import { AdminPage } from "./admin-page";
 import { DataTable, type Column } from "./data-table";
+import { TemporaryPasswordDialog, type TemporaryPassword } from "./temporary-password-dialog";
 
 const STATUS_VARIANT: Record<AccountStatus, "success" | "warning" | "neutral"> = {
   active: "success",
@@ -41,6 +45,76 @@ const STATUS_FILTERS: { value: AccountStatus | "all"; label: string }[] = [
 export function UsersAdmin() {
   const [statusFilter, setStatusFilter] = useState<AccountStatus | "all">("all");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
+  const [revealed, setRevealed] = useState<TemporaryPassword | null>(null);
+  const currentUserId = useCurrentUserId();
+
+  const setStatus = async (row: AdminUser, status: "active" | "deactivated") => {
+    await adminService.setUserStatus(row.id, status);
+    await usersQuery.refetch();
+  };
+
+  const reactivate = async (row: AdminUser) => {
+    try {
+      await setStatus(row, "active");
+      toast.success("Account reactivated", { description: `${row.displayName} can sign in again.` });
+    } catch (error) {
+      toast.error("Could not reactivate the account", {
+        description: isApiError(error) ? error.message : undefined,
+      });
+    }
+  };
+
+  const askToDeactivate = (row: AdminUser) =>
+    setConfirm({
+      title: `Deactivate ${row.displayName}?`,
+      destructive: true,
+      confirmLabel: "Yes, deactivate",
+      cancelLabel: "No",
+      description: (
+        <>
+          They are signed out everywhere at once and cannot sign in until you reactivate them. Their
+          messages stay. To let them back in later, use <strong>Reactivate account</strong> in the same
+          menu.
+        </>
+      ),
+      onConfirm: async () => {
+        try {
+          await setStatus(row, "deactivated");
+          toast.success("Account deactivated", { description: row.displayName });
+        } catch (error) {
+          toast.error("Could not deactivate the account", {
+            description: isApiError(error) ? error.message : undefined,
+          });
+          throw error;
+        }
+      },
+    });
+
+  const askToResetPassword = (row: AdminUser) =>
+    setConfirm({
+      title: `Reset ${row.displayName}'s password?`,
+      destructive: true,
+      confirmLabel: "Yes, reset it",
+      cancelLabel: "No",
+      description: (
+        <>
+          Their current password stops working and they are signed out everywhere. You will get a
+          temporary password to give them — it is shown once.
+        </>
+      ),
+      onConfirm: async () => {
+        try {
+          const result = await adminService.resetPassword(row.id);
+          setRevealed({ displayName: row.displayName, username: result.username, password: result.password });
+        } catch (error) {
+          toast.error("Could not reset the password", {
+            description: isApiError(error) ? error.message : undefined,
+          });
+          throw error;
+        }
+      },
+    });
 
   const usersQuery = useQuery({ queryKey: ["admin-users"], queryFn: () => adminService.listUsers() });
   const rolesQuery = useQuery({ queryKey: ["admin-roles"], queryFn: () => adminService.listRoles() });
@@ -90,23 +164,6 @@ export function UsersAdmin() {
           {row.status}
         </Badge>
       ),
-    },
-    {
-      id: "twoFactor",
-      header: "2FA",
-      sortValue: (row) => (row.twoFactorEnabled ? 1 : 0),
-      cell: (row) =>
-        row.twoFactorEnabled ? (
-          <span className="flex items-center gap-1 text-2xs text-success">
-            <ShieldCheck className="size-3.5" aria-hidden />
-            On
-          </span>
-        ) : (
-          <span className="flex items-center gap-1 text-2xs text-fg-subtle">
-            <ShieldOff className="size-3.5" aria-hidden />
-            Off
-          </span>
-        ),
     },
     {
       id: "messages",
@@ -172,24 +229,26 @@ export function UsersAdmin() {
                 ))}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="danger"
-              onSelect={async () => {
-                try {
-                  await adminService.setUserStatus(row.id, "deactivated");
-                  await usersQuery.refetch();
-                  toast.success("Account deactivated", { description: row.displayName });
-                } catch {
-                  toast.error("Could not deactivate account", {
-                    description: "You may not have permission.",
-                  });
-                }
-              }}
-            >
-              <Ban />
-              Deactivate account
+            <DropdownMenuItem disabled={row.id === currentUserId} onSelect={() => askToResetPassword(row)}>
+              <KeyRound />
+              Reset password
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {row.status === "deactivated" ? (
+              <DropdownMenuItem onSelect={() => void reactivate(row)}>
+                <Check />
+                Reactivate account
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                variant="danger"
+                disabled={row.id === currentUserId}
+                onSelect={() => askToDeactivate(row)}
+              >
+                <Ban />
+                Deactivate account
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -208,6 +267,8 @@ export function UsersAdmin() {
       }
     >
       <AddMemberDialog open={isAddOpen} onOpenChange={setIsAddOpen} />
+      <ConfirmDialog options={confirm} onClose={() => setConfirm(null)} />
+      <TemporaryPasswordDialog revealed={revealed} onClose={() => setRevealed(null)} />
 
       <DataTable
         rows={rows}

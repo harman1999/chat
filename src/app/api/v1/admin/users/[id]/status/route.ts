@@ -8,13 +8,17 @@ import { requireSession } from "@server/lib/session";
 import { adminRepo } from "@server/repo/admin";
 
 export const PUT = handler(async (request: Request, ctx: { params: Promise<{ id: string }> }) => {
-  const { user } = await requireSession();
+  const { user, workspaceId } = await requireSession();
   await requirePermission(user.id, "p_user_deactivate");
   const { id } = await ctx.params;
   const body = await parseBody(request, accountStatusSchema);
   if (id === user.id) return problem(400, "invalid_request", "You cannot change your own status");
 
-  await adminRepo.setUserStatus(id, body.status);
+  // Someone in another workspace is "not found" here, and their sessions are
+  // never touched below.
+  if (!(await adminRepo.setUserStatus(workspaceId, id, body.status))) {
+    return problem(404, "not_found", "User not found");
+  }
 
   // Deactivating must take effect immediately, not at session expiry.
   if (body.status === "deactivated") {

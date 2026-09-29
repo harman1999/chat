@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { AccountSettings } from "@/components/settings";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Account settings" };
-
+/** Account settings were merged into Profile; old links and bookmarks land there. */
 export default function AccountSettingsPage() {
-  return <AccountSettings />;
+  redirect("/settings/profile");
 }
