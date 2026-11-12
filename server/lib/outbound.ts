@@ -1,4 +1,7 @@
-import { lookup } from "node:dns/promises";
+import { lookup as lookupAsync } from "node:dns/promises";
+import { lookup as lookupCallback, type LookupAddress } from "node:dns";
+import http from "node:http";
+import https from "node:https";
 import { isIP } from "node:net";
 import { env } from "../env";
 import { signPayload } from "./secrets";
@@ -82,7 +85,7 @@ export async function assertSafeUrl(raw: string): Promise<URL> {
   // returns one public and one private address would otherwise pass.
   let addresses: { address: string }[];
   try {
-    addresses = await lookup(url.hostname, { all: true });
+    addresses = await lookupAsync(url.hostname, { all: true });
   } catch {
     throw new OutboundError(`Could not resolve ${url.hostname}`);
   }
@@ -97,6 +100,94 @@ export async function assertSafeUrl(raw: string): Promise<URL> {
   }
 
   return url;
+}
+
+/**
+ * A fetch that only ever connects to an address it has just checked.
+ *
+ * `assertSafeUrl` resolves the name and checks the answer, but a plain `fetch`
+ * then resolves it again — and a DNS server the attacker controls can answer
+ * "a public address" the first time and "127.0.0.1" the second (DNS rebinding),
+ * walking straight past the check. Here the check happens inside the connection's
+ * own name lookup, so the address that is dialled is the address that was judged.
+ * The hostname is kept for TLS, so certificates are still verified against it.
+ *
+ * Redirects are never followed (a redirect is how a checked public URL becomes
+ * an internal one), and the response is read up to a cap.
+ */
+export async function safeFetch(
+  rawUrl: string | URL,
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string | URLSearchParams | Uint8Array;
+    signal?: AbortSignal;
+    maxBytes?: number;
+  } = {},
+): Promise<Response> {
+  const url = await assertSafeUrl(String(rawUrl));
+  const maxBytes = init.maxBytes ?? 1024 * 1024;
+  const body = init.body instanceof URLSearchParams ? init.body.toString() : init.body;
+  const lib = url.protocol === "https:" ? https : http;
+
+  return new Promise<Response>((resolve, reject) => {
+    const request = lib.request(
+      url,
+      {
+        method: init.method ?? "GET",
+        headers: {
+          ...(init.headers ?? {}),
+          ...(body !== undefined ? { "Content-Length": String(Buffer.byteLength(body)) } : {}),
+        },
+        agent: false,
+        lookup: (hostname, options, callback) => {
+          lookupCallback(hostname, { ...options, all: true }, (error, addresses) => {
+            if (error) return callback(error, "", 4);
+            const list = addresses as LookupAddress[];
+            const usable = list.filter((entry) => env.allowPrivateOutbound || !isPrivateAddress(entry.address));
+            if (usable.length === 0) {
+              return callback(new OutboundError(`${hostname} resolves to a private address`) as NodeJS.ErrnoException, "", 4);
+            }
+            // The wrapped signature depends on whether `all` was asked for.
+            const wantsAll = (options as { all?: boolean }).all;
+            return wantsAll
+              ? (callback as unknown as (e: null, a: LookupAddress[]) => void)(null, usable)
+              : callback(null, usable[0].address, usable[0].family);
+          });
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        let total = 0;
+        response.on("data", (chunk: Buffer) => {
+          total += chunk.length;
+          if (total > maxBytes) {
+            request.destroy(new OutboundError("The response was too large"));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on("end", () => {
+          const status = response.statusCode ?? 0;
+          const headers = new Headers();
+          for (const [key, value] of Object.entries(response.headers)) {
+            if (Array.isArray(value)) value.forEach((v) => headers.append(key, v));
+            else if (value !== undefined) headers.set(key, value);
+          }
+          const bodyless = status === 204 || status === 205 || status === 304 || (status >= 100 && status < 200);
+          resolve(new Response(bodyless ? null : new Uint8Array(Buffer.concat(chunks)), { status, headers }));
+        });
+        response.on("error", reject);
+      },
+    );
+    request.on("error", reject);
+    if (init.signal) {
+      if (init.signal.aborted) request.destroy(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      init.signal.addEventListener("abort", () => request.destroy(Object.assign(new Error("aborted"), { name: "AbortError" })), { once: true });
+    }
+    if (body !== undefined) request.write(body);
+    request.end();
+  });
 }
 
 export interface DeliveryResult {
@@ -152,7 +243,7 @@ export async function deliver(
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -163,8 +254,7 @@ export async function deliver(
       },
       body,
       signal: controller.signal,
-      // A redirect is how a validated public URL becomes an internal one.
-      redirect: "manual",
+      maxBytes: MAX_RESPONSE_BYTES,
     });
 
     const text = (await response.text()).slice(0, MAX_RESPONSE_BYTES);

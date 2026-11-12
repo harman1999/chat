@@ -279,6 +279,12 @@ export const usersRepo = {
     );
   },
 
+  /** "active", "deactivated", …; null when there is no such person. */
+  async accountStatus(userId: string): Promise<string | null> {
+    const row = await queryOne<{ account_status: string }>(`SELECT account_status FROM users WHERE id = $1`, [userId]);
+    return row?.account_status ?? null;
+  },
+
   async findByEmail(workspaceId: string, email: string) {
     return queryOne<UserRow & { password_hash: string | null; account_status: string }>(
       `SELECT ${USER_COLUMNS}, u.password_hash, u.account_status

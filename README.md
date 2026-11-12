@@ -16,7 +16,7 @@ TanStack Query.
 - [Project map](#project-map) — which file does which job
 - [How a request flows](#how-a-request-flows)
 - [Architecture decisions](#architecture-decisions)
-- [Observability](#observability)
+- [Security](#security) · [Observability](#observability)
 - [Feature notes](#feature-notes) · [Design system](#design-system)
 - [Troubleshooting](#troubleshooting)
 
@@ -73,8 +73,9 @@ so the copy is enough to start. What each one does:
 | `REDIS_URL` | `redis://localhost:6381` | Sessions, presence, pub/sub, rate limits |
 | `STORAGE_DIR` | `./.storage` | Uploaded files on disk |
 | `WS_PORT` | `3101` | The WebSocket gateway's own port |
-| `ENCRYPTION_SECRET` | dev fallback | AES-256-GCM key for outgoing OAuth credentials |
-| `PUBLIC_URL` | `http://localhost:3000` | Builds the webhook URLs shown to admins |
+| `ENCRYPTION_SECRET` | dev fallback; **required in production** | AES-256-GCM key for stored credentials (outgoing OAuth, single sign-on secret) |
+| `PUBLIC_URL` | `http://localhost:3000`; **https required in production** | Webhook URLs, invite and reset links, single sign-on addresses |
+| `TRUSTED_PROXY_HOPS` | `0` in development, `1` in production | How many reverse proxies sit in front; see Security |
 | `SMTP_HOST` / `SMTP_PORT` | empty / `587` (`localhost` / `1026` locally) | Outgoing mail. No host means no mail |
 | `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASSWORD` | `false` / empty / empty | Implicit TLS and login, if your provider needs them |
 | `MAIL_FROM` | `Helix <no-reply@helix.local>` | The sender shown on every email |
@@ -86,9 +87,11 @@ so the copy is enough to start. What each one does:
 Two deserve more than a table row:
 
 **`ENCRYPTION_SECRET`** has a development fallback so a clean checkout runs, but
-set a real value before storing any real credential. Rotating it makes existing
-outgoing-OAuth connections undecryptable — which is the correct failure, since
-the alternative is silently trusting a default.
+a **production server refuses to start** without a real one (at least 32 random
+characters: `openssl rand -base64 32`), and also refuses the default database
+password, a missing `REDIS_URL`, and a `PUBLIC_URL` that is not `https://`.
+Rotating the secret makes existing stored credentials undecryptable — which is the
+correct failure, since the alternative is silently trusting a default.
 
 **`OUTBOUND_ALLOW_PRIVATE`** is off by default because a URL box that can reach
 the internal network is server-side request forgery with a form around it. Local
@@ -233,6 +236,11 @@ different things: the missing-field errors `tsc` finds are not caught by the dev
 | `lib/events.ts` | Publishes realtime events onto Redis pub/sub |
 | `lib/redis.ts` | Redis clients and key builders |
 | `lib/mail.ts`, `lib/mail-templates.ts` | `sendMail` (never throws, counted in metrics) and the email wording |
+| `lib/oidc.ts`, `lib/sso-state.ts`, `repo/sso.ts` | Single sign-on: discovery, token exchange, ID-token checks; the settings and identity links |
+| `lib/rank.ts` | Who may act on whom: Owner > Administrator > everyone else |
+| `lib/session-token.ts`, `lib/client-ip.ts`, `lib/busy.ts` | Session token hashing; the trusted-proxy client address; "too busy" for work that must not pile up |
+| `lib/outbound.ts` | `assertSafeUrl` and `safeFetch` — the only way out to an administrator-supplied URL |
+| `lib/production-check.ts` | Refuses to start production on missing or default secrets (run from `src/instrumentation.ts`) |
 | `lib/notify-email.ts` | When a mention or direct message becomes an email (`shouldEmail`) |
 | `lib/storage.ts` | Object storage behind a narrow interface — swap for S3 |
 | `lib/guard.ts` | Page-level redirect for signed-out visitors (routes authorise separately) |
@@ -338,6 +346,63 @@ it; migration `0003` made it structural.
 
 ---
 
+## Security
+
+A full audit was done on 2026-11-13 — see `docs/security-audit.md` for what was
+found and fixed. What protects the app, and what a deployment must do:
+
+- **Sessions.** The browser holds a random 256-bit token (`HttpOnly`,
+  `SameSite=Lax`, `Secure` in production). Only its SHA-256 is stored, keyed on
+  and listed, so a copy of Postgres, Redis or the "active sessions" screen holds
+  nothing that can be replayed. Sign-out, a password change and deactivation end
+  sessions at once — including live WebSockets.
+- **Who may act on whom.** The Owner outranks Administrators, who outrank everyone
+  else. You may act only on people below you and hand out only roles below yours;
+  nobody changes their own role; only the Owner edits the Administrator role, and
+  nobody grants a permission they do not hold (`server/lib/rank.ts`).
+- **Cross-site requests.** Changes made from another origin are refused
+  (`server/lib/http.ts`); webhook and OAuth-token endpoints, which other servers
+  call, are exempt by name. Pages send a Content-Security-Policy,
+  `X-Frame-Options: DENY`, `nosniff`, a referrer policy and (in production) HSTS;
+  API responses are `no-store` and sandboxed.
+- **Uploads.** A file is shown inline only if its bytes really are a PNG, JPEG,
+  WebP or GIF. Everything else downloads as an opaque attachment under a sandbox
+  CSP, whatever type the uploader claimed — an uploaded HTML page cannot run as the
+  app. Bodies are size-limited as they arrive, not by trusting `Content-Length`.
+- **Outbound requests** (webhooks, slash commands, OAuth, single sign-on) go
+  through `safeFetch`, which refuses private addresses at *connection* time, so
+  DNS rebinding cannot slip past the check, and never follows redirects.
+- **Passwords** use scrypt N=2^16, r=8, p=2 (OWASP), with the parameters stored in
+  each hash. Older hashes keep working and are upgraded at next sign-in. At most
+  three hash at once; beyond a short queue a sign-in gets a quick 503, so a flood
+  cannot starve the database connections that share Node's thread pool.
+- **The gateway** checks the cookie and the `Origin`, limits frame size (4 KB),
+  message rate and sockets per person, survives malformed frames, and cuts off a
+  socket when its session ends.
+- **Secrets.** Nothing sensitive is returned by the API or reaches the browser
+  bundle; stored credentials are encrypted or hashed; logs hold no tokens.
+  Production refuses to start on a missing, default or short `ENCRYPTION_SECRET`.
+
+**Deploying safely**
+
+1. Put the app behind a TLS-terminating reverse proxy that **appends** the client
+   address to `X-Forwarded-For`, and set `TRUSTED_PROXY_HOPS` to the number of
+   proxies. Without it the header is ignored (all callers share one address-scoped
+   rate-limit bucket); never set it higher than the truth, or clients can pick
+   their own address.
+2. Set `ENCRYPTION_SECRET`, `DATABASE_URL`, `REDIS_URL`, `PUBLIC_URL` (https) and
+   `NEXT_PUBLIC_WS_URL` (`wss://…`); the gateway's `Origin` check uses `PUBLIC_URL`.
+3. Leave `OUTBOUND_ALLOW_PRIVATE` off unless integrations live on your own network.
+4. Consider `UV_THREADPOOL_SIZE=8`, and rate-limit `/api/v1/auth/*` at the proxy
+   too: password checks are deliberately expensive.
+
+**Known limits.** `script-src` still allows inline scripts (Next.js needs per-request
+nonces to remove that); there is no CAPTCHA or lockout beyond rate limits; and
+until each person signs in once after the hashing upgrade, an account with an old
+hash answers a wrong password about 40 ms slower than one without.
+
+---
+
 ## Observability
 
 Two things fail quietly on purpose: the rate limiter fails open when Redis is
@@ -421,6 +486,36 @@ messages"). There is at most one email per person per conversation every 10
 minutes. Nobody is emailed about a channel they are not in. The rules are in
 `server/lib/notify-email.ts`, in one readable function.
 
+### Single sign-on
+
+**Administration → Authentication → Single sign-on** connects an OpenID Connect
+provider (Google, Microsoft Entra, Okta, Auth0, Keycloak …). Enter the provider's
+issuer address, client ID and client secret (stored encrypted, never shown
+again), and add the **redirect address** shown there to the provider. The sign-in
+page then offers "Sign in with {name}".
+
+- **Who gets in.** A person already linked to the provider identity (by its
+  stable id, not their email); else the account whose email the provider has
+  *verified*; else — only if "Create accounts for new people" is on — a new
+  Member. Allowed email domains limit who can be linked or created; creating
+  accounts needs at least one domain, so a public provider cannot let in
+  everyone.
+- **Requiring it.** Turns passwords off for everyone except the owner, who can
+  always use one if the provider is down. You must have signed in through single
+  sign-on yourself first. Members of a workspace that requires it get no
+  password-reset emails.
+- **What is checked.** Authorization-code flow with PKCE, a one-time `state`
+  bound to the browser by a cookie, a nonce, and the ID token's signature,
+  issuer, audience and expiry (asymmetric algorithms only). The provider's
+  address goes through the same private-address guard as webhooks.
+- **Not included.** SAML, LDAP / Active Directory, and automatic provisioning or
+  removal of people (SCIM).
+
+To try it locally without a real provider: `docker compose --profile sso up -d
+mock-oidc`, then use issuer `http://localhost:8099/helix`, any client ID and
+secret, and sign in with whatever username and email claims you type into its
+form. Stop it with `docker compose --profile sso stop mock-oidc`.
+
 ### Inviting people
 
 **Invite people** (app menu) makes a link that expires after 1, 7 or 30 days and
@@ -500,6 +595,12 @@ under `server/`.
 **Ports already in use.** 5434 and 6381 are already offset to avoid host
 installs; change them in `docker-compose.yml` and `.env.local` together.
 
+**Single sign-on says "could not be completed".** The server log (`./scripts/helix.sh
+logs web`) has the reason: an unreachable issuer, a wrong client secret, or an
+ID token that failed a check. Redirect address mismatches show up at the provider.
+If you are locked out after requiring it, the owner can still sign in with a
+password.
+
 **No email arrives.** Check `SMTP_HOST` is set in `.env.local` and restart the app
 (`./scripts/helix.sh restart`) — environment is read at start. Locally, make sure
 the Mailpit container is up (`docker ps`) and look in <http://localhost:8026>.
@@ -539,3 +640,5 @@ Each phase was completed and verified before the next began.
 | 17 | Blue sidebar and top bar, app menu, working status and availability | **Done** |
 | 18 | Email: SMTP module, Mailpit inbox, reset-password by email | **Done** |
 | 19 | Invite by email; email notifications for mentions and direct messages | **Done** |
+| 20 | Single sign-on (OpenID Connect) | **Done** |
+| 21 | Security audit and hardening (`docs/security-audit.md`) | **Done** |

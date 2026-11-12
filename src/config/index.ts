@@ -5,4 +5,4 @@
  * These values are genuinely part of the build — the list of supported
  * languages is not workspace content — so they belong in the bundle.
  */
-export { LANGUAGES, TIMEZONES, STATUS_PRESETS, defaultPreferences } from "./preferences";
+export { LANGUAGES, TIMEZONES, STATUS_PRESETS, defaultPreferences, withDefaults } from "./preferences";

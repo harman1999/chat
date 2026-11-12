@@ -1,5 +1,5 @@
 import { queryOne } from "../db/client";
-import { assertSafeUrl } from "./outbound";
+import { assertSafeUrl, safeFetch } from "./outbound";
 import { decryptSecret } from "./secrets";
 import { integrationsRepo } from "../repo/integrations";
 
@@ -80,7 +80,7 @@ export async function getConnectionToken(
 async function refresh(row: TokenRow): Promise<ConnectionToken | null> {
   try {
     const tokenUrl = await assertSafeUrl(row.token_url);
-    const response = await fetch(tokenUrl, {
+    const response = await safeFetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: new URLSearchParams({
@@ -89,7 +89,6 @@ async function refresh(row: TokenRow): Promise<ConnectionToken | null> {
         client_id: row.client_id,
         client_secret: decryptSecret(row.client_secret_enc),
       }),
-      redirect: "manual",
       signal: AbortSignal.timeout(10_000),
     });
 

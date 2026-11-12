@@ -3,6 +3,7 @@ import { audit } from "@server/lib/audit";
 import { requirePermission } from "@server/lib/permissions";
 import { createUserSchema } from "@server/lib/schemas";
 import { requireSession } from "@server/lib/session";
+import { assertMayAssign, rankOfRole, rankOfUser } from "@server/lib/rank";
 import { adminRepo } from "@server/repo/admin";
 import { usersRepo } from "@server/repo/users";
 
@@ -24,6 +25,14 @@ export const POST = handler(async (request: Request) => {
   await requirePermission(user.id, "p_user_invite");
 
   const body = await parseBody(request, createUserSchema);
+
+  // An account created with a chosen password and a chosen role is the easiest
+  // way to mint a higher level than your own, so the role is checked first.
+  if (body.roleId) {
+    const [actorRank, roleRank] = await Promise.all([rankOfUser(workspaceId, user.id), rankOfRole(workspaceId, body.roleId)]);
+    if (!actorRank) return problem(403, "forbidden", "Not permitted");
+    if (roleRank) assertMayAssign(actorRank, roleRank);
+  }
   const result = await usersRepo.create({ workspaceId, ...body });
 
   if (!result.ok) {

@@ -1,8 +1,10 @@
 import { handler, json, parseBody, problem } from "@server/lib/http";
 import { consume, LOGIN_ACCOUNT_RULE, LOGIN_IP_RULE, penalise, reset } from "@server/lib/rate-limit";
 import { signInAs } from "@server/lib/session";
-import { hashPassword, verifyPassword } from "@server/lib/password";
+import { query } from "@server/db/client";
+import { hashPassword, passwordNeedsRehash, verifyPassword } from "@server/lib/password";
 import { loginSchema } from "@server/lib/schemas";
+import { ssoRepo } from "@server/repo/sso";
 import { mapUser, usersRepo } from "@server/repo/users";
 
 let decoy: Promise<string> | undefined;
@@ -41,7 +43,14 @@ export const POST = handler(async (request: Request) => {
   );
   const matches = [];
   for (const row of candidates) {
-    if (await verifyPassword(body.password, row.password_hash as string)) matches.push(row);
+    if (await verifyPassword(body.password, row.password_hash as string)) {
+      matches.push(row);
+    } else if (passwordNeedsRehash(row.password_hash as string)) {
+      // A wrong guess against an older, cheaper hash would be answered faster
+      // than one against an unknown address (which pays the full current cost),
+      // and that difference would say which addresses have accounts. Pay it here.
+      await verifyPassword(body.password, await decoyHash());
+    }
   }
   // With no account, still spend one hash's time, so the response time does
   // not tell an unknown address from a wrong password.
@@ -80,10 +89,20 @@ export const POST = handler(async (request: Request) => {
   }
 
   const [row] = active;
-  const { sessionId, expiresAt } = await signInAs(row.id, request);
+  // With single sign-on required, passwords stop working — except for the owner,
+  // who must always be able to get in if the provider is down or misconfigured.
+  // Said only after the password is proven, like the other account-specific answers.
+  if (row.role !== "owner" && (await ssoRepo.isEnforced(row.workspace_id))) {
+    return problem(403, "sso_required", "Your workspace requires single sign-on. Use the single sign-on button.");
+  }
+  // The password is proven, so this is the one moment its plaintext is on hand
+  // to redo an older, cheaper hash at the current cost.
+  if (passwordNeedsRehash(row.password_hash as string)) {
+    await query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [row.id, await hashPassword(body.password)]);
+  }
+  const { expiresAt } = await signInAs(row.id, request);
   return json({
     user: mapUser(row),
-    accessToken: sessionId,
     expiresAt: expiresAt.toISOString(),
   });
 }, { rateLimit: LOGIN_IP_RULE });

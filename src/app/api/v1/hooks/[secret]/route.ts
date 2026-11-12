@@ -48,5 +48,5 @@ export const POST = handler(
 
     return json({ ok: true, messageId: message.id }, { status: 201 });
   },
-  { rateLimit: WEBHOOK_RULE },
+  { rateLimit: WEBHOOK_RULE, allowCrossOrigin: true },
 );

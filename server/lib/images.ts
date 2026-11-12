@@ -4,7 +4,7 @@
  * Formats an image may be. SVG is left out on purpose: it can carry script,
  * and these are shown to everyone in a workspace.
  */
-import { discardBody } from "./http";
+import { readBytes } from "./http";
 
 export type ImageMime = "image/png" | "image/jpeg" | "image/webp";
 
@@ -35,11 +35,9 @@ export async function readImage(
   request: Request,
   maxBytes: number,
 ): Promise<{ ok: true; data: Buffer; mime: ImageMime } | { ok: false; status: 400 | 413 | 415 }> {
-  if (Number(request.headers.get("content-length") ?? 0) > maxBytes) {
-    await discardBody(request);
-    return { ok: false, status: 413 };
-  }
-  const data = Buffer.from(await request.arrayBuffer());
+  // Counted as it arrives, so a body sent in chunks cannot skip the limit.
+  const data = await readBytes(request, maxBytes);
+  if (!data) return { ok: false, status: 413 };
   if (data.byteLength === 0) return { ok: false, status: 400 };
   if (data.byteLength > maxBytes) return { ok: false, status: 413 };
   const mime = sniffImage(data);

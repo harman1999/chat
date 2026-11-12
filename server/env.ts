@@ -34,6 +34,16 @@ export const env = {
   publicUrl: process.env.PUBLIC_URL ?? "http://localhost:3000",
   wsPort: Number(process.env.WS_PORT ?? 3101),
   /**
+   * How many reverse proxies sit between the internet and this app, each adding
+   * the address it saw to X-Forwarded-For. The client's address is the entry
+   * that many places from the right — the only one a client cannot choose.
+   *
+   * 0 means none are trusted: the header is ignored, because anyone can send it.
+   * Left to the deployment: a request that skips the proxy tier and the app
+   * would otherwise believe whatever address it was told.
+   */
+  trustedProxyHops: Math.max(0, Math.floor(Number(process.env.TRUSTED_PROXY_HOPS ?? (process.env.NODE_ENV === "production" ? 1 : 0))) || 0),
+  /**
    * Outgoing mail. No host means no mail: features that need it say so rather
    * than pretending to send. Development points this at Mailpit (docker-compose),
    * a catch-all inbox, so nothing real is ever sent from a laptop.

@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { env } from "../env";
 import { increment, logThrottled } from "./metrics";
+import { clientIpFromHeaders } from "./client-ip";
+import { sessionIdFor } from "./session-token";
 import { redis } from "./redis";
 
 export interface RateLimitRule {
@@ -80,17 +82,18 @@ export async function penalise(
 }
 
 async function identify(request: Request | undefined, scope: "identity" | "ip"): Promise<string> {
-  const ip =
-    request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    request?.headers.get("x-real-ip") ??
-    "unknown";
+  // "unknown" when no trusted proxy is configured: such callers share one
+  // address-scoped bucket rather than each getting a fresh one by lying.
+  const ip = (request && clientIpFromHeaders(request.headers)) ?? "unknown";
 
   if (scope === "ip") return `ip:${ip}`;
 
   try {
     const store = await cookies();
-    const sessionId = store.get(env.sessionCookie)?.value;
-    if (sessionId) return `session:${sessionId}`;
+    const token = store.get(env.sessionCookie)?.value;
+    // The hash, never the cookie itself: a bucket name is a Redis key, and keys
+    // can be listed — they must not spell out live session tokens.
+    if (token && token.length <= 200) return `session:${sessionIdFor(token)}`;
   } catch {
     /* outside a request context — fall through to IP */
   }
@@ -160,6 +163,14 @@ export const INVITE_RULE: RateLimitRule = {
   windowSeconds: 3600,
   scope: "identity",
   name: "invite",
+};
+
+/** Starting or finishing a single sign-on attempt; both redirect, so by IP only. */
+export const SSO_RULE: RateLimitRule = {
+  limit: 60,
+  windowSeconds: 300,
+  scope: "ip",
+  name: "sso",
 };
 
 /** Search runs four queries per call. */

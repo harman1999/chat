@@ -1,7 +1,7 @@
 import { env } from "@server/env";
 import { handler, json, problem } from "@server/lib/http";
 import { audit } from "@server/lib/audit";
-import { assertSafeUrl } from "@server/lib/outbound";
+import { assertSafeUrl, safeFetch } from "@server/lib/outbound";
 import { redis } from "@server/lib/redis";
 import { decryptSecret } from "@server/lib/secrets";
 import { requirePermission } from "@server/lib/permissions";
@@ -45,7 +45,7 @@ export const GET = handler(async (request: Request, ctx: { params: Promise<{ id:
   if (!code) return problem(400, "invalid_callback", "Missing code");
 
   const tokenUrl = await assertSafeUrl(connection.token_url);
-  const response = await fetch(tokenUrl, {
+  const response = await safeFetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({
@@ -55,7 +55,6 @@ export const GET = handler(async (request: Request, ctx: { params: Promise<{ id:
       client_secret: decryptSecret(connection.client_secret_enc),
       redirect_uri: `${env.publicUrl}/api/v1/admin/integrations/oauth-connections/${id}/callback`,
     }),
-    redirect: "manual",
     signal: AbortSignal.timeout(10_000),
   });
 

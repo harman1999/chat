@@ -3,6 +3,7 @@ import { audit } from "@server/lib/audit";
 import { requirePermission } from "@server/lib/permissions";
 import { permissionChangesSchema } from "@server/lib/schemas";
 import { requireSession } from "@server/lib/session";
+import { OWNER_RANK, permissionsHeldBy, rankOfRole, rankOfUser } from "@server/lib/rank";
 import { adminRepo } from "@server/repo/admin";
 import { roleIdFor } from "@server/repo/roles";
 
@@ -23,6 +24,24 @@ export const PUT = handler(async (request: Request) => {
   const { user, workspaceId } = await requireSession();
   await requirePermission(user.id, "p_user_manage_roles");
   const { changes } = await parseBody(request, permissionChangesSchema);
+
+  // Only the Owner may edit the Administrator role (or any role as high as their
+  // own), and nobody may grant a permission they do not hold: otherwise an
+  // administrator could write themselves the powers they were meant not to have.
+  const actorRank = await rankOfUser(workspaceId, user.id);
+  if (!actorRank) return problem(403, "forbidden", "Not permitted");
+  if (actorRank !== OWNER_RANK) {
+    const held = await permissionsHeldBy(user.id);
+    for (const change of changes) {
+      const roleRank = await rankOfRole(workspaceId, change.roleId);
+      if (roleRank && roleRank >= actorRank) {
+        return problem(403, "above_your_level", "Only the owner can change the permissions of the Administrator role");
+      }
+      if (change.granted && !held.has(change.permissionId)) {
+        return problem(403, "above_your_level", "You can only grant permissions you hold yourself");
+      }
+    }
+  }
 
   const result = await adminRepo.applyPermissionChanges({
     workspaceId,

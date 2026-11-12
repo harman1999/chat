@@ -6,6 +6,7 @@ import { generateSecret } from "@server/lib/secrets";
 import { env } from "@server/env";
 import { forgotPasswordSchema } from "@server/lib/schemas";
 import { passwordResetsRepo, RESET_LINK_MINUTES } from "@server/repo/passwordResets";
+import { ssoRepo } from "@server/repo/sso";
 import { usersRepo } from "@server/repo/users";
 
 /** Same words whether or not the address has an account. */
@@ -46,6 +47,9 @@ async function deliver(email: string): Promise<void> {
       (row) => row.account_status !== "deactivated",
     );
     for (const account of accounts) {
+      // Where single sign-on is required a password would not get them in, so a
+      // reset link would only mislead. The owner can still use one.
+      if (account.role !== "owner" && (await ssoRepo.isEnforced(account.workspace_id))) continue;
       const secret = generateSecret("reset");
       await passwordResetsRepo.create(account.id, secret.hash);
       await sendMail(

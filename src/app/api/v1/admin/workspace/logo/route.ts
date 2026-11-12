@@ -1,4 +1,4 @@
-import { discardBody, handler, json, noContent, problem } from "@server/lib/http";
+import { readBytes, handler, json, noContent, problem } from "@server/lib/http";
 import { audit } from "@server/lib/audit";
 import { requirePermission } from "@server/lib/permissions";
 import { UPLOAD_RULE } from "@server/lib/rate-limit";
@@ -12,14 +12,9 @@ export const PUT = handler(async (request: Request) => {
   const { user, workspaceId } = await requireSession();
   await requirePermission(user.id, "p_admin_settings");
 
-  // Refuse on the declared length before buffering, then check what arrived.
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_LOGO_BYTES) {
-    await discardBody(request);
-    return problem(413, "file_too_large", TOO_LARGE);
-  }
-  const data = Buffer.from(await request.arrayBuffer());
+  const data = await readBytes(request, MAX_LOGO_BYTES);
+  if (!data) return problem(413, "file_too_large", TOO_LARGE);
   if (data.byteLength === 0) return problem(400, "empty_file", "Choose an image to upload");
-  if (data.byteLength > MAX_LOGO_BYTES) return problem(413, "file_too_large", TOO_LARGE);
 
   const mime = sniffLogo(data);
   if (!mime) {

@@ -2,14 +2,14 @@ import { handler, json, noContent, parseBody } from "@server/lib/http";
 import { preferencesSchema } from "@server/lib/schemas";
 import { requireSession } from "@server/lib/session";
 import { usersRepo } from "@server/repo/users";
-import { defaultPreferences } from "@/config";
+import { withDefaults } from "@/config";
 
 export const GET = handler(async () => {
   const { user } = await requireSession();
   const stored = await usersRepo.getPreferences(user.id);
   // Merge over defaults so a preference added after the row was written is
-  // never missing from the response.
-  return json({ ...defaultPreferences, ...stored });
+  // never missing from the response — including inside a section saved earlier.
+  return json(withDefaults(stored));
 });
 
 export const PATCH = handler(async (request: Request) => {

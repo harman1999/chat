@@ -64,6 +64,24 @@ export const emailChangeSchema = z.object({
   password: z.string().min(1).max(512),
 });
 
+const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+export const ssoConfigSchema = z.object({
+  enabled: z.boolean(),
+  label: z.string().trim().min(1).max(40),
+  issuer: z.string().trim().url().max(500),
+  clientId: z.string().trim().min(1).max(300),
+  /** Left out to keep the stored one; it is never sent back. */
+  clientSecret: z.string().trim().min(1).max(2000).optional(),
+  allowedDomains: z.array(z.string().trim().toLowerCase().regex(DOMAIN, "Not a valid domain")).max(20),
+  autoCreate: z.boolean(),
+  enforced: z.boolean(),
+});
+
+export const ssoTestSchema = z.object({
+  issuer: z.string().trim().url().max(500),
+});
+
 export const forgotPasswordSchema = z.object({
   email: z.string().trim().email().max(320),
 });

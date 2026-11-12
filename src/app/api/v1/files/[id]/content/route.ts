@@ -1,4 +1,5 @@
-import { discardBody, handler, noContent, problem } from "@server/lib/http";
+import { sniffImage } from "@server/lib/images";
+import { readBytes, handler, noContent, problem } from "@server/lib/http";
 import { UPLOAD_RULE } from "@server/lib/rate-limit";
 import { query, queryOne } from "@server/db/client";
 import { requireSession } from "@server/lib/session";
@@ -34,19 +35,11 @@ export const PUT = handler(async (request: Request, ctx: { params: Promise<{ id:
     return problem(403, "forbidden", "This upload belongs to someone else");
   }
 
-  // The 50 MB cap at ticket time applies to a client-*declared* size. Nothing
-  // previously checked the bytes actually sent, so reject on the declared
-  // length before buffering, then reconcile against the reservation after.
-  const declared = Number(request.headers.get("content-length") ?? 0);
-  if (declared > MAX_UPLOAD_BYTES) {
-    await discardBody(request);
-    return problem(413, "file_too_large", "Files must be 50 MB or smaller");
-  }
-
-  const data = Buffer.from(await request.arrayBuffer());
-  if (data.byteLength > MAX_UPLOAD_BYTES) {
-    return problem(413, "file_too_large", "Files must be 50 MB or smaller");
-  }
+  // The 50 MB cap at ticket time applies to a client-*declared* size, so the
+  // bytes actually sent are counted as they arrive (a chunked body declares no
+  // length), then reconciled against the reservation.
+  const data = await readBytes(request, Math.min(MAX_UPLOAD_BYTES, Number(attachment.size_bytes)));
+  if (!data) return problem(413, "size_mismatch", "Upload is larger than the reserved size");
   if (data.byteLength > Number(attachment.size_bytes)) {
     return problem(413, "size_mismatch", "Upload is larger than the reserved size");
   }
@@ -56,6 +49,14 @@ export const PUT = handler(async (request: Request, ctx: { params: Promise<{ id:
   await query(`UPDATE attachments SET size_bytes = $2 WHERE id = $1`, [id, data.byteLength]);
   return noContent();
 }, { rateLimit: UPLOAD_RULE });
+
+/** PNG, JPEG, WebP or GIF by their opening bytes — never by what the uploader said. */
+function sniffServableImage(data: Buffer): string | null {
+  const png = sniffImage(data);
+  if (png) return png;
+  const head = data.toString("latin1", 0, 6);
+  return head === "GIF87a" || head === "GIF89a" ? "image/gif" : null;
+}
 
 export const GET = handler(async (_request: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { user } = await requireSession();
@@ -80,10 +81,23 @@ export const GET = handler(async (_request: Request, ctx: { params: Promise<{ id
   }
 
   const data = await storage.get(attachment.storage_key);
+
+  // The type the uploader *declared* is not trusted: an HTML or SVG file served
+  // as such from this origin runs as the app, with the viewer's session — one
+  // click on a shared file would be an account takeover. Only a file whose bytes
+  // really are a raster image is shown in the page; everything else is sent as
+  // an opaque download.
+  const image = sniffServableImage(data);
+  const name = attachment.name.replace(/[\u0000-\u001f\u007f"\\/]/g, "_").slice(0, 200) || "file";
   return new Response(new Uint8Array(data), {
     headers: {
-      "Content-Type": attachment.mime_type,
-      "Content-Disposition": `inline; filename="${encodeURIComponent(attachment.name)}"`,
+      "Content-Type": image ?? "application/octet-stream",
+      "Content-Disposition": `${image ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(name)}`,
+      "X-Content-Type-Options": "nosniff",
+      // Belt and braces: even if something rendered it, nothing in it may run,
+      // load, or reach the network.
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "Cross-Origin-Resource-Policy": "same-origin",
       "Cache-Control": "private, max-age=3600",
     },
   });

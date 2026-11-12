@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { query } from "../db/client";
+import { clientIpFromHeaders } from "./client-ip";
 import { increment } from "./metrics";
 import type { AuditCategory, AuditSeverity } from "../../src/types";
 
@@ -20,10 +21,7 @@ export interface AuditEntry {
  * than a missing log line. Failures are logged for the operator instead.
  */
 export async function audit(entry: AuditEntry): Promise<void> {
-  const ip =
-    entry.request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    entry.request?.headers.get("x-real-ip") ??
-    null;
+  const ip = (entry.request && clientIpFromHeaders(entry.request.headers)) ?? null;
 
   try {
     // The workspace is taken from the actor's own row rather than from

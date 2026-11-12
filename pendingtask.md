@@ -4,15 +4,22 @@ Written 2026-11-12. Not every item was re-checked against the code, so confirm
 before starting one.
 
 ## Sign-in and security
-- [ ] Single sign-on: SAML, OIDC, LDAP / Active Directory
+- [x] Single sign-on with OpenID Connect (Google, Entra, Okta, Auth0…) — done 2026-11-13
+- [ ] Single sign-on: SAML
+- [ ] Directory sign-in: LDAP / Active Directory
+- [ ] Automatic provisioning and removal of people (SCIM)
 - [ ] Real two-factor login (the fake 2FA was removed; nothing replaced it)
+- [x] Security audit and hardening — done 2026-11-13 (`docs/security-audit.md`)
+- [ ] Remove `'unsafe-inline'` from `script-src` (needs per-request CSP nonces)
+- [ ] Notify people of repeated failed sign-ins / lock an account after many failures
+- [ ] Automated security regression tests (the audit's attack scripts were run by hand, not kept in the repo)
 
 ## Email and push
 - [x] Mail server (SMTP + Mailpit) and password-reset emails — done 2026-11-12
 - [x] Email the invite link when an admin invites someone — done 2026-11-12
 - [x] Email notifications for mentions and direct messages, with an on/off setting — done 2026-11-12
 - [ ] Email for thread replies and keywords (only mentions and direct messages are emailed today)
-- [ ] Make saved preferences load from the account on a new browser (see HANDOVER 5.30)
+- [x] Saved preferences load from the account on a new browser — done 2026-11-13
 - [ ] Mobile push notifications
 
 ## Apps

@@ -25,6 +25,27 @@ export const defaultPreferences: UserPreferences = {
   },
 };
 
+/**
+ * Fills whatever a saved copy is missing from the defaults, one level down.
+ *
+ * Saved preferences are written a section at a time, so an account saved before
+ * a setting existed has the section but not the new field. A plain spread would
+ * keep that older section and lose the field; this keeps both.
+ */
+export function withDefaults(stored?: Partial<UserPreferences> | null): UserPreferences {
+  const d = defaultPreferences;
+  return {
+    ...d,
+    ...stored,
+    messages: { ...d.messages, ...stored?.messages },
+    notifications: {
+      ...d.notifications,
+      ...stored?.notifications,
+      doNotDisturb: { ...d.notifications.doNotDisturb, ...stored?.notifications?.doNotDisturb },
+    },
+  };
+}
+
 export const LANGUAGES = [
   { value: "en-GB", label: "English (United Kingdom)" },
   { value: "en-US", label: "English (United States)" },

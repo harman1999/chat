@@ -5,6 +5,7 @@ import { audit } from "@server/lib/audit";
 import { requirePermission } from "@server/lib/permissions";
 import { accountStatusSchema } from "@server/lib/schemas";
 import { requireSession } from "@server/lib/session";
+import { assertOutranks, rankOfUser } from "@server/lib/rank";
 import { adminRepo } from "@server/repo/admin";
 
 export const PUT = handler(async (request: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -13,6 +14,12 @@ export const PUT = handler(async (request: Request, ctx: { params: Promise<{ id:
   const { id } = await ctx.params;
   const body = await parseBody(request, accountStatusSchema);
   if (id === user.id) return problem(400, "invalid_request", "You cannot change your own status");
+
+  // Deactivating someone ends their sessions, so it is only for people below you.
+  const [actorRank, targetRank] = await Promise.all([rankOfUser(workspaceId, user.id), rankOfUser(workspaceId, id)]);
+  if (!actorRank) return problem(403, "forbidden", "Not permitted");
+  if (!targetRank) return problem(404, "not_found", "User not found");
+  assertOutranks(actorRank, targetRank, "change the status of");
 
   // Someone in another workspace is "not found" here, and their sessions are
   // never touched below.

@@ -11,6 +11,8 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { env } from "../env";
 import { query, queryOne } from "../db/client";
 import { startRetentionJob } from "../jobs/retention";
+import { assertProductionConfig } from "../lib/production-check";
+import { sessionIdFor } from "../lib/session-token";
 import { createSubscriber, presenceKey, redis, REALTIME_CHANNEL, sessionKey } from "../lib/redis";
 
 interface Client {
@@ -21,9 +23,30 @@ interface Client {
   /** Their workspace, for events addressed to a whole workspace (presence). */
   workspaceId: string;
   isAlive: boolean;
+  /** Which session opened it, so a revoked session can be cut off. */
+  sessionId: string;
+  /** Frames received in the current second, for flood control. */
+  frames: number;
+  windowStart: number;
 }
 
 const clients = new Set<Client>();
+
+/** The only client frames are small typing notices; anything bigger is abuse. */
+const MAX_FRAME_BYTES = 4 * 1024;
+const MAX_FRAMES_PER_SECOND = 20;
+const MAX_SOCKETS_PER_USER = 10;
+const MAX_SOCKETS_TOTAL = 5_000;
+
+/** Browsers always send Origin on a WebSocket handshake; tools may not. */
+function originAllowed(origin: string | undefined): boolean {
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === new URL(env.publicUrl).host;
+  } catch {
+    return false;
+  }
+}
 
 function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
@@ -35,20 +58,25 @@ function parseCookies(header: string | undefined): Record<string, string> {
   );
 }
 
-async function authenticate(cookieHeader: string | undefined, token: string | null) {
-  const sessionId = parseCookies(cookieHeader)[env.sessionCookie] ?? token;
-  if (!sessionId) return null;
+/** Whether this session still exists. Redis first; Postgres if Redis lost it. */
+async function sessionUser(sessionId: string): Promise<string | null> {
+  const cached = await redis.get(sessionKey(sessionId));
+  if (cached) return cached;
+  const row = await queryOne<{ user_id: string }>(
+    `SELECT user_id FROM sessions WHERE id = $1 AND expires_at > now()`,
+    [sessionId],
+  );
+  return row?.user_id ?? null;
+}
 
-  let userId = await redis.get(sessionKey(sessionId));
-  if (!userId) {
-    const row = await queryOne<{ user_id: string }>(
-      `SELECT user_id FROM sessions WHERE id = $1 AND expires_at > now()`,
-      [sessionId],
-    );
-    if (!row) return null;
-    userId = row.user_id;
-  }
-  return userId;
+async function authenticate(cookieHeader: string | undefined) {
+  // The cookie only. A token in the URL would end up in access logs and in
+  // browser history, so it is not accepted.
+  const raw = parseCookies(cookieHeader)[env.sessionCookie];
+  if (!raw || raw.length > 200) return null;
+  const sessionId = sessionIdFor(raw);
+  const userId = await sessionUser(sessionId);
+  return userId ? { userId, sessionId } : null;
 }
 
 async function channelsFor(userId: string): Promise<Set<string>> {
@@ -83,54 +111,85 @@ function shouldDeliver(
 }
 
 async function main() {
+  assertProductionConfig();
   const httpServer = createServer((request, response) => {
     if (request.url === "/health") {
+      // Nothing about load or who is connected: this port is reachable by anyone.
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ ok: true, clients: clients.size }));
+      response.end(JSON.stringify({ ok: true }));
       return;
     }
     response.writeHead(426);
     response.end("Upgrade required");
   });
 
-  const wss = new WebSocketServer({ server: httpServer });
+  const wss = new WebSocketServer({
+    server: httpServer,
+    // The library default is 100 MiB per frame, held in memory.
+    maxPayload: MAX_FRAME_BYTES,
+    // Refused during the handshake, before a socket exists: a page on another
+    // origin must not be able to open this connection with the visitor's cookie.
+    verifyClient: (info: { origin?: string }) => originAllowed(info.origin),
+  });
+
+  // A malformed or oversized frame makes the library emit "error" on that one
+  // connection. With no listener Node treats it as fatal, so a single bad frame
+  // from any client used to take the whole gateway down for everyone.
+  wss.on("error", (error) => console.error("[ws] server error:", String(error)));
 
   wss.on("connection", async (socket, request) => {
-    const url = new URL(request.url ?? "/", "http://localhost");
-    const userId = await authenticate(request.headers.cookie, url.searchParams.get("token"));
+    // Attached first, before anything is awaited: an error during sign-in checks
+    // must be absorbed too. The library closes the socket itself (1009 for too
+    // big, 1002 for a protocol error) after emitting.
+    socket.on("error", (error) => console.error("[ws] socket error:", (error as Error).message));
+    const auth = await authenticate(request.headers.cookie);
 
-    if (!userId) {
+    if (!auth) {
       socket.close(4001, "Unauthorized");
       return;
     }
+    const { userId, sessionId } = auth;
 
+    if (clients.size >= MAX_SOCKETS_TOTAL || [...clients].filter((c) => c.userId === userId).length >= MAX_SOCKETS_PER_USER) {
+      socket.close(4008, "Too many connections");
+      return;
+    }
+
+    // Registered and counted from the first instant, with its listeners attached
+    // before anything is awaited. They used to be attached after the lookups
+    // below, so frames sent in that window were dropped (the flood limit never
+    // saw them) and a socket that closed during it was never cleaned up, leaving
+    // a phantom entry that counted against the connection caps.
     const client: Client = {
       socket,
       userId,
-      channelIds: await channelsFor(userId),
-      workspaceId: await workspaceOf(userId),
+      channelIds: new Set(),
+      workspaceId: "",
       isAlive: true,
+      sessionId,
+      frames: 0,
+      windowStart: Date.now(),
     };
     clients.add(client);
-
-    await redis.set(presenceKey(userId), "online", "EX", 120);
-    await query(`UPDATE users SET presence = 'online', last_active_at = now() WHERE id = $1`, [userId]);
-    await redis.publish(
-      REALTIME_CHANNEL,
-      JSON.stringify({
-        event: "user.online",
-        seq: await redis.incr("helix:seq"),
-        emittedAt: new Date().toISOString(),
-        payload: { userId, status: "online" },
-        audience: { workspaceId: client.workspaceId },
-      }),
-    );
+    let ready = false;
 
     socket.on("pong", () => {
       client.isAlive = true;
     });
 
     socket.on("message", async (raw) => {
+      // Each frame fans out through Redis, so a flood from one socket would be
+      // amplified to everyone in the channel.
+      const now = Date.now();
+      if (now - client.windowStart >= 1_000) {
+        client.windowStart = now;
+        client.frames = 0;
+      }
+      if (++client.frames > MAX_FRAMES_PER_SECOND) {
+        socket.close(4029, "Slow down");
+        return;
+      }
+      if (!ready) return; // still loading who this is; nothing to relay yet
       try {
         const frame = JSON.parse(raw.toString()) as { event: string; payload: unknown };
         // Typing is the only client-originated event, and it is relayed rather
@@ -157,6 +216,7 @@ async function main() {
     });
 
     socket.on("close", async () => {
+      try {
       clients.delete(client);
       const stillConnected = [...clients].some((other) => other.userId === userId);
       if (stillConnected) return;
@@ -173,7 +233,38 @@ async function main() {
           audience: { workspaceId: client.workspaceId },
         }),
       );
+      } catch (error) {
+        // A database or Redis hiccup while announcing someone left must not
+        // become an unhandled rejection, which also stops the process.
+        console.error("[ws] could not announce disconnect:", String(error));
+      }
     });
+
+    try {
+      const [channelIds, workspaceId] = await Promise.all([channelsFor(userId), workspaceOf(userId)]);
+      client.channelIds = channelIds;
+      client.workspaceId = workspaceId;
+      // Gone already? The close handler has run; announcing "online" now would
+      // leave them shown as online with nobody connected.
+      if (socket.readyState !== socket.OPEN) return;
+      ready = true;
+
+      await redis.set(presenceKey(userId), "online", "EX", 120);
+      await query(`UPDATE users SET presence = 'online', last_active_at = now() WHERE id = $1`, [userId]);
+      await redis.publish(
+        REALTIME_CHANNEL,
+        JSON.stringify({
+          event: "user.online",
+          seq: await redis.incr("helix:seq"),
+          emittedAt: new Date().toISOString(),
+          payload: { userId, status: "online" },
+          audience: { workspaceId: client.workspaceId },
+        }),
+      );
+    } catch (error) {
+      console.error("[ws] could not set up a connection:", String(error));
+      socket.close(1011, "Server error");
+    }
   });
 
   // Fan events from Redis out to the sockets this process owns.
@@ -224,6 +315,16 @@ async function main() {
       }
       client.isAlive = false;
       client.socket.ping();
+      // Signing out, a password change or a deactivation ends the session; the
+      // socket it opened must end too, not keep receiving messages.
+      void sessionUser(client.sessionId)
+        .then((still) => {
+          if (!still) {
+            client.socket.close(4001, "Signed out");
+            clients.delete(client);
+          }
+        })
+        .catch(() => undefined);
     }
   }, 30_000);
 
@@ -246,6 +347,11 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 }
+
+// One misbehaving connection or one failed query must not stop the gateway for
+// everyone else; log it and keep serving.
+process.on("unhandledRejection", (reason) => console.error("[ws] unhandled rejection:", String(reason)));
+process.on("uncaughtException", (error) => console.error("[ws] uncaught exception:", error));
 
 main().catch((error) => {
   console.error("[ws] failed to start", error);

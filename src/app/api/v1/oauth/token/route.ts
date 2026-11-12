@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { handler, json } from "@server/lib/http";
+import { handler, json, readBytes } from "@server/lib/http";
 import { query, queryOne } from "@server/db/client";
 import { hashSecret, secretMatches } from "@server/lib/secrets";
 import { integrationsRepo } from "@server/repo/integrations";
@@ -27,7 +27,13 @@ function oauthError(status: number, code: string, description: string) {
  */
 export const POST = handler(
   async (request: Request) => {
-    const form = await request.formData().catch(() => null);
+    // Bounded like every other body: a token request is a few hundred bytes.
+    const bytes = await readBytes(request, 16 * 1024);
+    const form = bytes
+      ? await new Response(new Uint8Array(bytes), {
+          headers: { "content-type": request.headers.get("content-type") ?? "" },
+        }).formData().catch(() => null)
+      : null;
     if (!form) return oauthError(400, "invalid_request", "Expected a form-encoded body");
 
     const get = (key: string) => String(form.get(key) ?? "");
@@ -97,7 +103,7 @@ export const POST = handler(
 
     return oauthError(400, "unsupported_grant_type", `${grantType} is not supported`);
   },
-  { rateLimit: TOKEN_RULE },
+  { rateLimit: TOKEN_RULE, allowCrossOrigin: true },
 );
 
 async function issueTokens(appId: string, userId: string, scopes: string[]) {

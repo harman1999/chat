@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { env } from "../env";
 import { query, queryOne } from "../db/client";
 import { redis, sessionKey } from "./redis";
+import { clientIpFromHeaders } from "./client-ip";
+import { newSessionToken, sessionIdFor } from "./session-token";
 import { hashSecret } from "./secrets";
 import type { User } from "../../src/types";
 import { mapUser, USER_COLUMNS, type UserRow } from "../repo/users";
@@ -52,8 +53,11 @@ export async function sessionLifetimeSeconds(userId: string): Promise<number> {
 export async function createSession(
   userId: string,
   request?: Request,
-): Promise<{ sessionId: string; expiresAt: Date; lifetimeSeconds: number }> {
-  const sessionId = randomUUID();
+): Promise<{ token: string; sessionId: string; expiresAt: Date; lifetimeSeconds: number }> {
+  // `token` goes to the browser once, in the cookie. `sessionId` — its hash — is
+  // the only form that is stored, keyed on, or ever shown.
+  const token = newSessionToken();
+  const sessionId = sessionIdFor(token);
   const lifetimeSeconds = await sessionLifetimeSeconds(userId);
   const expiresAt = new Date(Date.now() + lifetimeSeconds * 1000);
 
@@ -70,7 +74,7 @@ export async function createSession(
       agent.slice(0, 120) || "Unknown device",
       agent.match(/(Chrome|Firefox|Safari|Edg)\/[\d.]+/)?.[0] ?? "",
       "",
-      request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+      (request && clientIpFromHeaders(request.headers)) ?? null,
       expiresAt,
     ],
   );
@@ -78,7 +82,7 @@ export async function createSession(
   await redis.set(sessionKey(sessionId), userId, "EX", lifetimeSeconds);
   await query(`UPDATE users SET last_sign_in_at = now() WHERE id = $1`, [userId]);
 
-  return { sessionId, expiresAt, lifetimeSeconds };
+  return { token, sessionId, expiresAt, lifetimeSeconds };
 }
 
 /**
@@ -91,10 +95,10 @@ export async function signInAs(
   request: Request,
   replacing?: string,
 ): Promise<{ sessionId: string; expiresAt: Date }> {
-  const { sessionId, expiresAt, lifetimeSeconds } = await createSession(userId, request);
+  const { token, sessionId, expiresAt, lifetimeSeconds } = await createSession(userId, request);
   if (replacing) await destroySession(replacing);
   const store = await cookies();
-  store.set(env.sessionCookie, sessionId, {
+  store.set(env.sessionCookie, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -188,8 +192,9 @@ export async function getSession(): Promise<SessionContext | null> {
   if (viaToken) return viaToken;
 
   const store = await cookies();
-  const sessionId = store.get(env.sessionCookie)?.value;
-  if (!sessionId) return null;
+  const token = store.get(env.sessionCookie)?.value;
+  if (!token || token.length > 200) return null;
+  const sessionId = sessionIdFor(token);
 
   let userId = await redis.get(sessionKey(sessionId));
 
@@ -263,5 +268,5 @@ export class ForbiddenError extends Error {
 
 export async function clientIp(): Promise<string | null> {
   const list = await headers();
-  return list.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  return clientIpFromHeaders(list);
 }
