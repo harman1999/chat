@@ -61,7 +61,11 @@ export interface NotificationPreferences {
   threadReplies: boolean;
   /** Also notify when these words appear, not just @mentions. */
   keywords: string[];
-  emailDigest: "never" | "daily" | "weekly";
+  /**
+   * Email me about mentions and direct messages while I am away. Mail is only
+   * sent when the workspace has email set up.
+   */
+  emailNotifications: boolean;
   doNotDisturb: {
     enabled: boolean;
     /** 24-hour "HH:mm". */

@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { AppLogo } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -140,7 +141,12 @@ export function LoginForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="login-password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="login-password">Password</Label>
+              <Link href="/forgot-password" className="text-2xs font-medium text-accent hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <Input
               id="login-password"
               type="password"

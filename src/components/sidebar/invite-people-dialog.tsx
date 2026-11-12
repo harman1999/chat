@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Link2, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Link2, Loader2, Mail, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, type ConfirmOptions } from "@/components/ui/confirm-dialog";
 import { inviteService } from "@/services";
+import type { InviteCreated } from "@/services/inviteService";
 import { isApiError } from "@/services/http";
 import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -68,6 +69,20 @@ function Choice<T extends string | number | null>({
   );
 }
 
+/** The same shape the server accepts; it checks again, this only saves a round trip. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Splits what was typed on commas, semicolons, spaces and new lines. */
+function parseEmails(text: string): { valid: string[]; invalid: string[] } {
+  const parts = [...new Set(text.split(/[\s,;]+/).map((part) => part.trim()).filter(Boolean))];
+  return {
+    valid: parts.filter((part) => EMAIL_PATTERN.test(part)),
+    invalid: parts.filter((part) => !EMAIL_PATTERN.test(part)),
+  };
+}
+
+const MAX_EMAILS = 20;
+
 function describeUses(link: InviteLink): string {
   if (link.maxUses === null) return `${link.useCount} joined · no limit`;
   return `${link.useCount} of ${link.maxUses} used`;
@@ -76,10 +91,9 @@ function describeUses(link: InviteLink): string {
 /**
  * Invite people with a link.
  *
- * There is no mail transport, so this does not send anything: it makes a link
- * the inviter shares however they like, and the invitee chooses their own name
- * and password when they open it. The copy says so plainly rather than
- * implying an email goes out.
+ * It makes a link; the invitee chooses their own name and password when they
+ * open it. The inviter can share it however they like, or give addresses and
+ * have it emailed to each. The full link is shown once either way.
  */
 export function InvitePeopleDialog({
   open,
@@ -94,6 +108,8 @@ export function InvitePeopleDialog({
   const [expiresInDays, setExpiresInDays] = useState<1 | 7 | 30>(7);
   const [maxUses, setMaxUses] = useState<number | null>(10);
   const [url, setUrl] = useState<string | null>(null);
+  const [emailsText, setEmailsText] = useState("");
+  const [outcome, setOutcome] = useState<InviteCreated | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmOptions | null>(null);
 
@@ -103,11 +119,18 @@ export function InvitePeopleDialog({
     enabled: open,
   });
 
+  const { valid: emails, invalid: badEmails } = parseEmails(emailsText);
+  const tooMany = emails.length > MAX_EMAILS;
+
   const create = useMutation({
-    mutationFn: () => inviteService.create({ expiresInDays, maxUses }),
+    mutationFn: () => inviteService.create({ expiresInDays, maxUses, emails }),
     onSuccess: async (result) => {
       setUrl(result.url);
+      setOutcome(result);
       setCopied(false);
+      if (result.emailed.length > 0) {
+        toast.success(`Invitation emailed to ${result.emailed.length} ${result.emailed.length === 1 ? "person" : "people"}`);
+      }
       await queryClient.invalidateQueries({ queryKey: ["invite-links"] });
     },
     onError: (error) =>
@@ -160,21 +183,46 @@ export function InvitePeopleDialog({
         onOpenChange={(next) => {
           onOpenChange(next);
           // The URL is shown once; closing forgets it, as the server already has.
-          if (!next) setUrl(null);
+          if (!next) {
+            setUrl(null);
+            setOutcome(null);
+            setEmailsText("");
+          }
         }}
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Invite people to {workspaceName}</DialogTitle>
             <DialogDescription>
-              Create a link and share it however you like. Nothing is emailed — people who open it
-              choose their own name and password, and join as a Member.
+              Create a link and share it, or email it straight to people. Whoever opens it chooses
+              their own name and password, and joins as a Member.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 px-5 py-4">
             <Choice label="Link expires after" options={EXPIRY} value={expiresInDays} onChange={setExpiresInDays} />
             <Choice label="Can be used by" options={USES} value={maxUses} onChange={setMaxUses} />
+
+            {!url && (
+              <div className="space-y-1.5">
+                <label htmlFor="invite-emails" className="text-xs font-medium text-fg">
+                  Email it to <span className="font-normal text-fg-subtle">(optional)</span>
+                </label>
+                <textarea
+                  id="invite-emails"
+                  value={emailsText}
+                  rows={2}
+                  placeholder="ada@company.com, grace@company.com"
+                  aria-invalid={badEmails.length > 0 || tooMany}
+                  onChange={(event) => setEmailsText(event.target.value)}
+                  className="w-full resize-none rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-fg shadow-xs transition-colors placeholder:text-fg-subtle hover:border-border-strong focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-[color-mix(in_oklch,var(--accent)_35%,transparent)] aria-invalid:border-danger"
+                />
+                {badEmails.length > 0 && (
+                  <p className="text-2xs text-danger">Not an email address: {badEmails.join(", ")}</p>
+                )}
+                {tooMany && <p className="text-2xs text-danger">At most {MAX_EMAILS} addresses at a time.</p>}
+              </div>
+            )}
 
             {url ? (
               <div className="space-y-1.5">
@@ -191,17 +239,32 @@ export function InvitePeopleDialog({
                 <p className="text-2xs text-fg-subtle">
                   Copy it now — for security it is only shown this once.
                 </p>
+                {outcome && (outcome.emailed.length > 0 || outcome.failed.length > 0 || outcome.alreadyMembers.length > 0) && (
+                  <ul className="space-y-0.5 pt-1 text-2xs">
+                    {outcome.emailed.length > 0 && (
+                      <li className="text-fg-muted">Emailed: {outcome.emailed.join(", ")}</li>
+                    )}
+                    {outcome.failed.length > 0 && (
+                      <li className="text-danger">Could not email: {outcome.failed.join(", ")} — send them the link yourself.</li>
+                    )}
+                    {outcome.alreadyMembers.length > 0 && (
+                      <li className="text-fg-muted">Already in this workspace: {outcome.alreadyMembers.join(", ")}</li>
+                    )}
+                  </ul>
+                )}
               </div>
             ) : (
               <Button
                 variant="primary"
                 size="sm"
                 className="w-full"
-                disabled={create.isPending}
+                disabled={create.isPending || badEmails.length > 0 || tooMany}
                 onClick={() => create.mutate()}
               >
-                {create.isPending ? <Loader2 className="animate-spin" /> : <Link2 />}
-                Create invite link
+                {create.isPending ? <Loader2 className="animate-spin" /> : emails.length > 0 ? <Mail /> : <Link2 />}
+                {emails.length > 0
+                  ? `Create link and email ${emails.length} ${emails.length === 1 ? "person" : "people"}`
+                  : "Create invite link"}
               </Button>
             )}
 

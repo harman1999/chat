@@ -33,6 +33,18 @@ export const env = {
   /** Public origin, used to build webhook URLs shown to administrators. */
   publicUrl: process.env.PUBLIC_URL ?? "http://localhost:3000",
   wsPort: Number(process.env.WS_PORT ?? 3101),
+  /**
+   * Outgoing mail. No host means no mail: features that need it say so rather
+   * than pretending to send. Development points this at Mailpit (docker-compose),
+   * a catch-all inbox, so nothing real is ever sent from a laptop.
+   */
+  smtpHost: process.env.SMTP_HOST || undefined,
+  smtpPort: Number(process.env.SMTP_PORT ?? 587),
+  /** Implicit TLS (port 465). Leave off for STARTTLS or a plain local inbox. */
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  smtpUser: process.env.SMTP_USER || undefined,
+  smtpPassword: process.env.SMTP_PASSWORD || undefined,
+  mailFrom: process.env.MAIL_FROM ?? "Helix <no-reply@helix.local>",
   // No default workspace: sign-in finds the account by email across
   // workspaces and asks which one when there are several (auth/login).
 };

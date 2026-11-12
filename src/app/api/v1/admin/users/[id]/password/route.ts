@@ -9,8 +9,8 @@ import { adminRepo } from "@server/repo/admin";
 /**
  * Resets someone's password to a temporary one, returned once.
  *
- * Nothing here can send email, so there is no reset link: the administrator
- * gets the password and passes it on. The person's every session ends, so a
+ * This is the administrator's route: they get a temporary password and pass
+ * it on. People who can reach their own email use "Forgot password?" instead. The person's every session ends, so a
  * forgotten or stolen password stops working immediately. The password is
  * chosen here, never by the client, and appears only in this response — not in
  * the audit log.

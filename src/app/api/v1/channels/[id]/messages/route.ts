@@ -5,6 +5,7 @@ import { messageBodySchema } from "@server/lib/schemas";
 import { ForbiddenError, requireSession } from "@server/lib/session";
 import { channelsRepo } from "@server/repo/channels";
 import { messagesRepo } from "@server/repo/messages";
+import { emailAboutMessage } from "@server/lib/notify-email";
 import { notificationsRepo } from "@server/repo/notifications";
 import { threadsRepo } from "@server/repo/threads";
 
@@ -72,8 +73,31 @@ export const POST = handler(async (request: Request, ctx: { params: Promise<{ id
     }
   }
 
-  // Detached on purpose: a slow external endpoint must not hold up the sender.
   const channel = await channelsRepo.get(id, user.id, workspaceId);
+
+  // Email for people who are away. Detached: a slow mail server must not hold
+  // up the sender, and a failure there is not the sender's problem.
+  if (channel?.kind === "dm" || channel?.kind === "group_dm") {
+    void emailAboutMessage({
+      kind: "direct",
+      recipientIds: channel.memberIds,
+      actor: user,
+      channelId: id,
+      channelLabel: "",
+      text,
+    });
+  } else if (message.mentionedUserIds.length > 0) {
+    void emailAboutMessage({
+      kind: "mention",
+      recipientIds: message.mentionedUserIds,
+      actor: user,
+      channelId: id,
+      channelLabel: `#${channel?.name ?? "a channel"}`,
+      text,
+    });
+  }
+
+  // Detached on purpose: a slow external endpoint must not hold up the sender.
   dispatchOutgoing({
     workspaceId,
     message,

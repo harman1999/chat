@@ -12,7 +12,6 @@ import {
   SegmentedControl,
   SettingRow,
   SettingSection,
-  SettingSelect,
 } from "./setting-primitives";
 
 const LEVELS: { value: NotificationLevel; label: string }[] = [
@@ -211,25 +210,17 @@ export function NotificationSettings() {
         </SettingRow>
       </SettingSection>
 
-      <SettingSection title="Email" description="What we send when you're away.">
+      <SettingSection title="Email" description="What we send when you are away from the app.">
         <SettingRow
-          label="Activity digest"
-          htmlFor="notif-digest"
+          label="Email me about mentions and direct messages"
+          description="Sent only while you are away or offline, never during Do not disturb, and at most one per conversation every 10 minutes."
+          htmlFor="notif-email"
           control={
-            <SettingSelect
-              id="notif-digest"
-              value={notifications.emailDigest}
-              onChange={(event) =>
-                setNotificationPreference(
-                  "emailDigest",
-                  event.target.value as typeof notifications.emailDigest,
-                )
-              }
-            >
-              <option value="never">Never</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </SettingSelect>
+            <Switch
+              id="notif-email"
+              checked={notifications.emailNotifications}
+              onCheckedChange={(checked) => setNotificationPreference("emailNotifications", checked)}
+            />
           }
         />
       </SettingSection>

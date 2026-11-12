@@ -135,6 +135,33 @@ export const PASSWORD_RULE: RateLimitRule = {
   name: "password",
 };
 
+/**
+ * "Forgot password" sends mail to whoever is named, so it is limited per
+ * address (to stop someone flooding one inbox) and per IP (to stop one caller
+ * sweeping many addresses).
+ */
+export const FORGOT_ACCOUNT_RULE: RateLimitRule = {
+  limit: 3,
+  windowSeconds: 900,
+  scope: "identity",
+  name: "forgot:account",
+};
+
+export const FORGOT_IP_RULE: RateLimitRule = {
+  limit: 20,
+  windowSeconds: 900,
+  scope: "ip",
+  name: "forgot:ip",
+};
+
+/** Creating an invite can send up to 20 emails, so creating them is limited. */
+export const INVITE_RULE: RateLimitRule = {
+  limit: 10,
+  windowSeconds: 3600,
+  scope: "identity",
+  name: "invite",
+};
+
 /** Search runs four queries per call. */
 export const SEARCH_RULE: RateLimitRule = {
   limit: 60,

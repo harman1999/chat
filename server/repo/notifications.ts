@@ -14,7 +14,55 @@ interface NotificationRow {
   created_at: Date;
 }
 
+/** Who might be emailed about a message, with what decides whether they are. */
+export interface EmailTarget {
+  userId: string;
+  email: string;
+  name: string;
+  presence: "online" | "away" | "dnd" | "offline";
+  timezone: string;
+  /** The stored `notifications` preferences; fields added later may be missing. */
+  notifications: {
+    emailNotifications?: boolean;
+    channelLevel?: "all" | "mentions" | "none";
+    directMessages?: "all" | "mentions" | "none";
+    doNotDisturb?: { enabled: boolean; from: string; to: string };
+  };
+}
+
 export const notificationsRepo = {
+  /**
+   * The people among `userIds` who belong to the conversation and can receive
+   * mail: not bots, not deactivated. Membership is checked here so a mention of
+   * someone outside a private channel never becomes an email about it.
+   */
+  async emailTargets(userIds: string[], channelId: string): Promise<EmailTarget[]> {
+    if (userIds.length === 0) return [];
+    const rows = await query<{
+      id: string;
+      email: string;
+      display_name: string;
+      presence: EmailTarget["presence"];
+      timezone: string | null;
+      preferences: { timezone?: string; notifications?: EmailTarget["notifications"] } | null;
+    }>(
+      `SELECT u.id, u.email, u.display_name, u.presence, u.timezone, p.preferences
+         FROM users u
+         JOIN channel_members m ON m.user_id = u.id AND m.channel_id = $2
+         LEFT JOIN user_preferences p ON p.user_id = u.id
+        WHERE u.id = ANY($1::text[]) AND NOT u.is_bot AND u.account_status <> 'deactivated'`,
+      [userIds, channelId],
+    );
+    return rows.map((row) => ({
+      userId: row.id,
+      email: row.email,
+      name: row.display_name,
+      presence: row.presence,
+      timezone: row.preferences?.timezone || row.timezone || "UTC",
+      notifications: row.preferences?.notifications ?? {},
+    }));
+  },
+
   async list(userId: string): Promise<AppNotification[]> {
     const rows = await query<NotificationRow>(
       `SELECT id, kind, actor_id, channel_id, message_id, title, preview, is_read, created_at

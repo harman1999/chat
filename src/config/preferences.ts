@@ -20,7 +20,7 @@ export const defaultPreferences: UserPreferences = {
     directMessages: "all",
     threadReplies: true,
     keywords: ["deploy", "incident", "on-call"],
-    emailDigest: "daily",
+    emailNotifications: true,
     doNotDisturb: { enabled: true, from: "20:00", to: "08:00" },
   },
 };

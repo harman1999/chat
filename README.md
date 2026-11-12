@@ -1,7 +1,7 @@
 # Helix
 
 Team communication for engineering organisations — a workspace / channel /
-thread product with a real backend: PostgreSQL, Redis, a WebSocket gateway,
+thread product (with teams inside one workspace) with a real backend: PostgreSQL, Redis, a WebSocket gateway,
 session auth, an administration surface, and six kinds of integration.
 
 Built with Next.js (App Router), TypeScript, Tailwind CSS v4, Zustand and
@@ -16,7 +16,7 @@ TanStack Query.
 - [Project map](#project-map) — which file does which job
 - [How a request flows](#how-a-request-flows)
 - [Architecture decisions](#architecture-decisions)
-- [Testing](#testing) · [CI](#continuous-integration) · [Observability](#observability)
+- [Observability](#observability)
 - [Feature notes](#feature-notes) · [Design system](#design-system)
 - [Troubleshooting](#troubleshooting)
 
@@ -41,7 +41,8 @@ Open <http://localhost:3000> and sign in:
 | Email | `harman.singh@northwind.io` |
 | Password | `helix-demo-password` |
 
-Every seeded account shares that password. `alice.johnson@northwind.io` is an
+Every seeded account shares that password. Wiping the database leaves only the
+owner account, which is the way to try a fresh setup. `alice.johnson@northwind.io` is an
 administrator and `bob.smith@northwind.io` an ordinary member — useful for
 seeing the permission boundaries from both sides.
 
@@ -49,9 +50,9 @@ seeing the permission boundaries from both sides.
 
 | Need | Version | Why |
 |---|---|---|
-| Node.js | 22+ | The app; CI pins 22 |
-| Docker + Compose | any current | Runs Postgres 16 and Redis 7 |
-| Free ports 3000, 3101, 5434, 6381 | — | Web, gateway, database, cache |
+| Node.js | 22+ | The app |
+| Docker + Compose | any current | Runs Postgres 16, Redis 7 and Mailpit |
+| Free ports 3000, 3101, 5434, 6381, 1026, 8026 | — | Web, gateway, database, cache, mail (SMTP and inbox) |
 
 Nothing else is installed globally. `tsx` runs the TypeScript scripts and is a
 dev dependency.
@@ -74,6 +75,9 @@ so the copy is enough to start. What each one does:
 | `WS_PORT` | `3101` | The WebSocket gateway's own port |
 | `ENCRYPTION_SECRET` | dev fallback | AES-256-GCM key for outgoing OAuth credentials |
 | `PUBLIC_URL` | `http://localhost:3000` | Builds the webhook URLs shown to admins |
+| `SMTP_HOST` / `SMTP_PORT` | empty / `587` (`localhost` / `1026` locally) | Outgoing mail. No host means no mail |
+| `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASSWORD` | `false` / empty / empty | Implicit TLS and login, if your provider needs them |
+| `MAIL_FROM` | `Helix <no-reply@helix.local>` | The sender shown on every email |
 | `OUTBOUND_ALLOW_PRIVATE` | `false` (`true` locally) | Lets integrations reach private addresses |
 | `NEXT_PUBLIC_USE_MOCK` | `false` | `true` serves fixtures with no backend at all |
 | `NEXT_PUBLIC_API_URL` | `/api/v1` | Where the client sends REST calls |
@@ -177,16 +181,15 @@ status line means, the log files, and a troubleshooting table.
 | `npm run dev:all` | Docker + migrate + both processes together |
 | `npm run build` / `start` | Production build / serve it |
 | `npm run lint` | ESLint |
-| `npx tsc --noEmit` | Typecheck — **Vitest does not typecheck**, so run this |
-| `npm test` / `test:watch` | Vitest, both suites |
+| `npx tsc --noEmit` | Typecheck |
 | `npm run db:up` / `db:down` | Start / stop Postgres and Redis |
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:seed` | Load the demo workspace (idempotent) |
 | `npm run db:reset` | Destroy the volume and rebuild from scratch |
 | `npm run create-user -- --email … --name … --password …` | Add a person from the shell |
 
-Run `tsc`, `lint`, `test` and `build` before calling anything done. They catch
-different things: the missing-field errors `tsc` finds never reach Vitest, and
+Run `tsc`, `lint` and `build` before calling anything done. They catch
+different things: the missing-field errors `tsc` finds are not caught by the dev server, and
 `next build` compiles route types the dev server does not.
 
 ---
@@ -197,8 +200,7 @@ different things: the missing-field errors `tsc` finds never reach Vitest, and
 
 | Path | Job |
 |---|---|
-| `docker-compose.yml` | Postgres 16 + Redis 7, project `helix`, offset ports, healthchecks |
-| `vitest.config.mts` | Two test projects — `integration` (real services) and `component` (jsdom) |
+| `docker-compose.yml` | Postgres 16, Redis 7 and Mailpit (a development inbox), project `helix`, offset ports, healthchecks |
 | `next.config.ts`, `tsconfig.json` | Framework config; `@/*` → `src`, `@server/*` → `server` |
 | `.env.example` | Every variable with a working default — copy to `.env.local` |
 | `scripts/helix.sh` | Start / stop / status for the running app — see `scripts/README.md` |
@@ -230,6 +232,8 @@ different things: the missing-field errors `tsc` finds never reach Vitest, and
 | `lib/metrics.ts` | In-process counters for the things that fail quietly |
 | `lib/events.ts` | Publishes realtime events onto Redis pub/sub |
 | `lib/redis.ts` | Redis clients and key builders |
+| `lib/mail.ts`, `lib/mail-templates.ts` | `sendMail` (never throws, counted in metrics) and the email wording |
+| `lib/notify-email.ts` | When a mention or direct message becomes an email (`shouldEmail`) |
 | `lib/storage.ts` | Object storage behind a narrow interface — swap for S3 |
 | `lib/guard.ts` | Page-level redirect for signed-out visitors (routes authorise separately) |
 | **`repo/`** — SQL in, domain types out. No SQL exists outside this directory. | |
@@ -245,10 +249,10 @@ different things: the missing-field errors `tsc` finds never reach Vitest, and
 
 | Path | Job |
 |---|---|
-| `app/api/v1/**/route.ts` | The REST API — 99 handlers across 81 files, each authorising independently |
+| `app/api/v1/**/route.ts` | The REST API — 130 handlers across 101 files, each authorising independently |
 | `app/login`, `app/workspace` | Sign-in and the main three-column application |
 | `app/settings/*` | Profile, preferences, appearance, notifications, account |
-| `app/admin/*` | Dashboard, users, roles, permissions, channels, storage, audit, integrations |
+| `app/admin/*` | Dashboard, users, teams, roles, permissions, channels, storage, audit, integrations |
 | `app/design-system` | Live token, type-scale and component reference |
 | `app/globals.css` | **Every design token.** Colour, radius, elevation, type, density |
 
@@ -258,30 +262,19 @@ different things: the missing-field errors `tsc` finds never reach Vitest, and
 |---|---|
 | `components/ui/` | Primitives — button, dialog, dropdown, popover, sheet, tabs, tooltip |
 | `components/common/` | Avatar, presence, badges, empty / loading / error states |
-| `components/layout/` | App shell, top bar, right panel, mobile tab bar |
-| `components/sidebar/` | Workspace sidebar, channel and DM rows, switcher |
+| `components/layout/` | App shell, top bar, right panel, mobile tab bar, the app menu (`app-menu.tsx`) |
+| `components/sidebar/` | Workspace sidebar, team column (`team-rail.tsx`), channel and DM rows, invite dialog |
 | `components/chat/` | Channel header, message list, dividers, composer (+ autocomplete) |
 | `components/messages/` | Message row, body renderer, reactions, actions, attachments |
 | `components/threads/`, `search/`, `notifications/`, `saved/` | Feature areas |
 | `components/settings/`, `components/admin/` | Settings sections; the admin surface |
-| `hooks/` | One hook per concern, all TanStack Query — `useMessages`, `useThread`, `useUsers`, `useSlashCommands`, `useRealtimeBridge`, … |
+| `hooks/` | One hook per concern, all TanStack Query — `useMessages`, `useThread`, `useUsers`, `useTeams`, `useSlashCommands`, `useRealtimeBridge`, … |
 | `services/` | The transport seam — one module per domain, plus `http.ts` and `realtimeClient.ts` |
 | `store/` | Zustand: UI state, workspace selection, message cache, preferences |
 | `config/` | Genuine build-time constants — languages, time zones, status presets |
 | `data/` | Mock-transport fixtures **only**; no component imports these |
 | `lib/` | Formatters, tokenizer, message grouping, keyboard registry, `cn` |
 | `types/index.ts` | The domain model shared by server, services and UI |
-
-### `tests/`
-
-| Path | Job |
-|---|---|
-| `integration/helpers.ts` | `signIn`, `db()`, `cache()`, `clearRateLimit`, the demo accounts |
-| `integration/global-setup.ts` | Applies the schema and clears rate-limit buckets once |
-| `integration/route-surface.test.ts` | Walks the app directory and asserts every route's auth |
-| `integration/*.test.ts` | Messaging, threads, search, account, admin, integrations, performance |
-| `component/render.tsx` | `renderWithProviders`, `makeUser`, `makeMessage`, `resetMessageStore` |
-| `component/*.test.tsx` | Identity-dependent UI, the add-member form, slash commands |
 
 ---
 
@@ -345,53 +338,6 @@ it; migration `0003` made it structural.
 
 ---
 
-## Testing
-
-`npm test` runs Vitest against **real** Postgres and Redis, not mocks, so the
-assertions cover what actually ships — routing, cookies, SQL and all. The
-harness pins `NEXT_PUBLIC_USE_MOCK=false`; without it a test would pass while
-exercising fixtures.
-
-The integration suite needs the app running (`npm run db:up` and `npm run dev`).
-
-- **integration** — authorization boundaries, body validation, jsonb
-  allow-lists, rate limiting, audit writes, upload reconciliation, the
-  message / reaction / thread / search contracts, account security (a password
-  change must revoke other sessions *in Redis*, not only in Postgres), and all
-  six integration types end to end.
-- **component** — React in jsdom with the query cache seeded directly, so a test
-  states who the viewer is rather than mocking the network.
-
-### The route-surface test
-
-`tests/integration/route-surface.test.ts` walks `src/app/api/v1`, derives the
-route table from the filesystem, and asserts that every route refuses an
-anonymous caller with 401 and every `/admin` route refuses an ordinary member
-with 403.
-
-Discovering routes rather than listing them means a route added tomorrow is
-covered without anyone remembering — the check cannot quietly fall behind the
-code. Status codes are asserted exactly: a 400 would mean the body was parsed
-before the session was checked, a 404 would confirm an id exists. Four routes
-are exempt and say why — sign-in, idempotent sign-out, and the two endpoints
-authenticated by something other than a session.
-
----
-
-## Continuous integration
-
-`.github/workflows/ci.yml` runs lint → typecheck → migrate → seed → build →
-start the production server → test, with Postgres and Redis as job services.
-
-Typecheck runs *before* the build, because a production build writes
-`.next/types` that a later `tsc` would read as though they were source.
-
-> Not yet proven in Actions — the workflow has never run, because the repository
-> has no remote. The sequence was verified locally against a freshly created
-> database.
-
----
-
 ## Observability
 
 Two things fail quietly on purpose: the rate limiter fails open when Redis is
@@ -447,12 +393,73 @@ integration can be disabled without being deleted. An outgoing webhook or slash
 command may authenticate with a stored OAuth connection, whose token is
 refreshed on demand.
 
+### Email and password reset
+
+Helix sends mail over SMTP (`SMTP_*` in `.env.local`). Locally that goes to
+**Mailpit**, a catch-all inbox started by `npm run db:up`: nothing leaves the
+machine, and everything the app sends can be read at <http://localhost:8026>.
+In production, point `SMTP_HOST` at your provider. With no host set, features
+that need mail say so instead of pretending to send.
+
+**Forgot password** on the sign-in page emails a link to
+`/reset-password?token=…`. The link works once and expires after an hour, only
+its hash is stored, and asking again replaces the earlier link. Every address
+gets the same answer, so the page cannot be used to find out who has an account;
+requests are limited per address and per IP. Choosing a new password ends every
+session that person had, records an audit entry, and sends a "your password was
+changed" notice. Administrators can still reset someone's password by hand under
+**Administration → Users**.
+
+### Notification emails
+
+**Settings → Notifications → Email** switches on emails about mentions and direct
+messages (on by default). An email is sent only when all of these hold: the
+setting is on; the person is away or offline (not at the app, not on Do not
+disturb); it is outside their quiet hours, in their own time zone; and their
+channel or direct-message level is not "Nothing" (direct messages need "All
+messages"). There is at most one email per person per conversation every 10
+minutes. Nobody is emailed about a channel they are not in. The rules are in
+`server/lib/notify-email.ts`, in one readable function.
+
+### Inviting people
+
+**Invite people** (app menu) makes a link that expires after 1, 7 or 30 days and
+can be used by 1 person, 10, or without limit. Type email addresses into the box
+and the link is emailed to each (up to 20 at a time); leave it empty to share the
+link yourself. People who already have an account here are listed instead of
+emailed, and addresses the mail server rejects are listed so you can send those
+by hand. The full link is shown once. Creating invites is limited to 10 an hour
+per person. If mail is not set up, asking to email people is refused before any
+link is made.
+
+### Teams
+
+A team is a group of people with channels of their own, inside the one fixed
+workspace. **Administration → Teams** (owners and administrators) creates teams,
+adds members and files channels under them. Access still comes from channel
+membership: adding someone to a team puts them in the team's channels, and
+removing them takes them out. The sidebar has a team column to filter channels by
+team, showing unread counts for the teams you are not looking at.
+
+### The app menu
+
+Click the workspace name at the top left of the chat. The menu lists Channels,
+Administration and Integrations (only for people allowed to use them), Invite
+people, About and Sign out, with your current place ticked. It appears only in
+the chat workspace; Settings and Administration have their own navigation.
+
+### Status and availability
+
+Availability (Online, Away, Do not disturb) and a custom status ("Lunch", with an
+emoji and an optional expiry) are separate. Both are set from the profile menu,
+saved on the account and shown to colleagues.
+
 ### Everything else
 
 Messages, threads, search, notifications, settings and administration are all
 built out — message grouping and day dividers, thread panels and a Threads
 inbox, full-text search scoped to the caller's channels, mentions, saved items
-and drafts, per-user preferences, and a ten-page admin surface with charts that
+and drafts, per-user preferences, and a twelve-page admin surface with charts that
 follow a validated categorical palette.
 
 ---
@@ -486,24 +493,17 @@ the dev server was running — they share `.next`. Stop the dev server,
 **`tsc` fails on files in `.next/types` you did not write.** A previous
 production build left route types behind. `rm -rf .next/types` and re-run.
 
-**Tests fail with "No server at http://localhost:3000".** The integration suite
-drives the real API over HTTP. Start `npm run db:up` and `npm run dev` first.
-
-**A test account is locked out.** A suite that exercises the login limiter
-leaves the window spent. `global-setup.ts` clears `ratelimit:*` at the start of
-every run; to clear one by hand:
-
-```bash
-docker exec helix-redis redis-cli --scan --pattern 'ratelimit:*' \
-  | xargs -r docker exec -i helix-redis redis-cli del
-```
-
 **Realtime events stop arriving.** The gateway is a separate process and does
 not hot-reload with `next dev`. Restart `npm run ws` after changing anything
 under `server/`.
 
 **Ports already in use.** 5434 and 6381 are already offset to avoid host
 installs; change them in `docker-compose.yml` and `.env.local` together.
+
+**No email arrives.** Check `SMTP_HOST` is set in `.env.local` and restart the app
+(`./scripts/helix.sh restart`) — environment is read at start. Locally, make sure
+the Mailpit container is up (`docker ps`) and look in <http://localhost:8026>.
+The `mail.sent` / `mail.failed` counters in the admin metrics show what happened.
 
 **A working app with nobody to sign in as.** The database was migrated but not
 seeded. `./scripts/helix.sh start` checks for this and seeds automatically;
@@ -535,3 +535,7 @@ Each phase was completed and verified before the next began.
 | 13 | Integrations: bots, webhooks, slash commands, OAuth 2.0 | **Done** |
 | 14 | Slash command autocomplete in the composer | **Done** |
 | 15 | OAuth consent screen, integration enable/disable, connection consumer | **Done** |
+| 16 | Teams inside one workspace, team column and filter; create/switch workspace retired | **Done** |
+| 17 | Blue sidebar and top bar, app menu, working status and availability | **Done** |
+| 18 | Email: SMTP module, Mailpit inbox, reset-password by email | **Done** |
+| 19 | Invite by email; email notifications for mentions and direct messages | **Done** |

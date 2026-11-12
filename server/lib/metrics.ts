@@ -19,7 +19,9 @@ export type MetricName =
   | "audit.written"
   | "audit.failed"
   | "webhook.delivered"
-  | "webhook.failed";
+  | "webhook.failed"
+  | "mail.sent"
+  | "mail.failed";
 
 export interface Counter {
   name: MetricName;

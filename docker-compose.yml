@@ -37,6 +37,20 @@ services:
       timeout: 3s
       retries: 20
 
+  # A catch-all inbox for development: the app sends real SMTP to it, nothing
+  # leaves the machine, and everything sent can be read at http://localhost:8026.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: helix-mailpit
+    ports:
+      - "1026:1025"   # SMTP — what the app connects to
+      - "8026:8025"   # web inbox and API
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
 volumes:
   helix-pgdata:
   helix-redisdata:

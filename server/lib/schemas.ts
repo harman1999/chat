@@ -64,6 +64,15 @@ export const emailChangeSchema = z.object({
   password: z.string().min(1).max(512),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().email().max(320),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(10).max(200),
+  newPassword: z.string().min(12, "Passwords must be at least 12 characters").max(512),
+});
+
 export const passwordSchema = z.object({
   currentPassword: z.string().min(1).max(512),
   newPassword: z.string().min(12, "Passwords must be at least 12 characters").max(512),
@@ -114,7 +123,7 @@ export const preferencesSchema = z
       directMessages: notificationLevel,
       threadReplies: z.boolean(),
       keywords: z.array(z.string().trim().min(1).max(64)).max(50),
-      emailDigest: z.enum(["never", "daily", "weekly"]),
+      emailNotifications: z.boolean(),
       doNotDisturb: z.object({
         enabled: z.boolean(),
         from: z.string().regex(/^\d{2}:\d{2}$/),
@@ -335,6 +344,8 @@ export const createInviteSchema = z.object({
   expiresInDays: z.union([z.literal(1), z.literal(7), z.literal(30)]).default(7),
   /** null for unlimited uses until it expires. */
   maxUses: z.number().int().min(1).max(1000).nullable().default(null),
+  /** Addresses to email the link to. Optional: a link can still be shared by hand. */
+  emails: z.array(z.string().trim().email().max(320)).max(20).default([]),
 });
 
 /** Joining through an invite link — the invitee chooses their own password. */
