@@ -1,3 +1,4 @@
+export { AppMenu } from "./app-menu";
 export { AppShell } from "./app-shell";
 export { ChannelDetailsPanel } from "./channel-details-panel";
 export { MobileTabBar } from "./mobile-tab-bar";

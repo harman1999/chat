@@ -48,7 +48,7 @@ export function SettingsNav({ orientation = "vertical" }: { orientation?: "verti
 
   if (orientation === "horizontal") {
     return (
-      <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto scrollbar-thin px-3 pb-2">
+      <nav aria-label="Settings sections" className="flex gap-1 overflow-x-auto scrollbar-thin px-3 py-2">
         {SETTINGS_SECTIONS.map((section) => {
           const isActive = pathname === section.href;
           return (
@@ -57,10 +57,10 @@ export function SettingsNav({ orientation = "vertical" }: { orientation?: "verti
               href={section.href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors focus-sidebar",
                 isActive
-                  ? "bg-accent-subtle text-accent-subtle-fg"
-                  : "text-fg-muted hover:bg-surface-hover hover:text-fg",
+                  ? "bg-sidebar-active text-sidebar-active-fg"
+                  : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg",
               )}
             >
               {section.label}
@@ -82,14 +82,14 @@ export function SettingsNav({ orientation = "vertical" }: { orientation?: "verti
             href={section.href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "flex items-start gap-2.5 rounded-md px-2 py-2 transition-colors",
-              isActive ? "bg-accent-subtle" : "hover:bg-surface-hover",
+              "flex items-start gap-2.5 rounded-md px-2 py-2 transition-colors focus-sidebar",
+              isActive ? "bg-sidebar-active" : "hover:bg-sidebar-hover",
             )}
           >
             <Icon
               className={cn(
                 "mt-0.5 size-4 shrink-0",
-                isActive ? "text-accent" : "text-fg-subtle",
+                isActive ? "text-sidebar-active-fg" : "text-sidebar-subtle",
               )}
               aria-hidden
             />
@@ -97,12 +97,14 @@ export function SettingsNav({ orientation = "vertical" }: { orientation?: "verti
               <span
                 className={cn(
                   "block truncate text-sm font-medium",
-                  isActive ? "text-accent-subtle-fg" : "text-fg",
+                  isActive ? "text-sidebar-active-fg" : "text-sidebar-fg",
                 )}
               >
                 {section.label}
               </span>
-              <span className="block truncate text-2xs text-fg-subtle">{section.description}</span>
+              <span className={cn("block truncate text-2xs", isActive ? "text-sidebar-muted" : "text-sidebar-subtle")}>
+                {section.description}
+              </span>
             </span>
           </Link>
         );

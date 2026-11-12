@@ -45,7 +45,7 @@ export function AdminNav({ orientation = "vertical" }: { orientation?: "vertical
 
   if (orientation === "horizontal") {
     return (
-      <nav aria-label="Administration sections" className="flex gap-1 overflow-x-auto scrollbar-thin px-3 pb-2">
+      <nav aria-label="Administration sections" className="flex gap-1 overflow-x-auto scrollbar-thin px-3 py-2">
         {ADMIN_SECTIONS.map((section) => {
           const isActive = pathname === section.href;
           return (
@@ -54,10 +54,10 @@ export function AdminNav({ orientation = "vertical" }: { orientation?: "vertical
               href={section.href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors focus-sidebar",
                 isActive
-                  ? "bg-accent-subtle text-accent-subtle-fg"
-                  : "text-fg-muted hover:bg-surface-hover hover:text-fg",
+                  ? "bg-sidebar-active text-sidebar-active-fg"
+                  : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg",
               )}
             >
               {section.label}
@@ -72,7 +72,7 @@ export function AdminNav({ orientation = "vertical" }: { orientation?: "vertical
     <nav aria-label="Administration sections" className="space-y-4">
       {GROUPS.map((group) => (
         <div key={group}>
-          <p className="mb-1 px-2 text-2xs font-semibold uppercase tracking-[0.06em] text-fg-subtle">
+          <p className="mb-1 px-2 text-2xs font-semibold uppercase tracking-[0.06em] text-sidebar-subtle">
             {group}
           </p>
           <div className="space-y-0.5">
@@ -85,14 +85,14 @@ export function AdminNav({ orientation = "vertical" }: { orientation?: "vertical
                   href={section.href}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors focus-sidebar",
                     isActive
-                      ? "bg-accent-subtle font-medium text-accent-subtle-fg"
-                      : "text-fg-muted hover:bg-surface-hover hover:text-fg",
+                      ? "bg-sidebar-active font-medium text-sidebar-active-fg"
+                      : "text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-fg",
                   )}
                 >
                   <Icon
-                    className={cn("size-4 shrink-0", isActive ? "text-accent" : "text-fg-subtle")}
+                    className={cn("size-4 shrink-0", isActive ? "text-sidebar-active-fg" : "text-sidebar-subtle")}
                     aria-hidden
                   />
                   <span className="truncate">{section.label}</span>

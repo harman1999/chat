@@ -10,7 +10,9 @@ import {
   SlidersHorizontal,
   Circle,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { UserAvatar } from "@/components/common";
 import {
   DropdownMenu,
@@ -27,7 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUser } from "@/hooks";
 import { PRESENCE_LABEL } from "@/lib/constants";
 import { reloadAs } from "@/lib/navigation";
-import { authService } from "@/services";
+import { authService, userService } from "@/services";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store";
 import { StatusControl } from "@/components/settings";
@@ -43,7 +45,21 @@ const PRESENCE_OPTIONS: { value: PresenceStatus; icon: typeof Circle; tone: stri
 export function UserMenu({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const setShortcutsOpen = useUIStore((state) => state.setShortcutsOpen);
+  const queryClient = useQueryClient();
   const { data: user } = useCurrentUser();
+
+  // The Availability options used to have no action at all; choosing one did nothing.
+  const choosePresence = async (status: PresenceStatus) => {
+    try {
+      await userService.setPresence(status);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["current-user"] }),
+        queryClient.invalidateQueries({ queryKey: ["users"] }),
+      ]);
+    } catch {
+      toast.error("Could not change your availability", { description: "Try again in a moment." });
+    }
+  };
 
   if (!user) {
     return (
@@ -106,7 +122,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
             {PRESENCE_OPTIONS.map((option) => {
               const Icon = option.icon;
               return (
-                <DropdownMenuItem key={option.value}>
+                <DropdownMenuItem key={option.value} onSelect={() => void choosePresence(option.value)}>
                   <Icon className={cn(option.tone, option.value !== "dnd" && "!fill-current")} />
                   {PRESENCE_LABEL[option.value]}
                 </DropdownMenuItem>

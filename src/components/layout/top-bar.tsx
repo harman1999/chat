@@ -9,6 +9,7 @@ import { WorkspaceSwitcher } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Hint } from "@/components/ui/tooltip";
+import { useTeamRail } from "@/hooks";
 import { workspaceService } from "@/services";
 import { useUIStore } from "@/store";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,8 @@ export function TopBar() {
   const setDrawerOpen = useUIStore((state) => state.setSidebarDrawerOpen);
   const isCollapsed = useUIStore((state) => state.isSidebarCollapsed);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+  // The team column sits left of the sidebar, so this slot has to reach past it too.
+  const hasTeamRail = useTeamRail().isVisible;
 
   // Same key the sidebar used, so this is served from cache, not refetched.
   const { data: workspaces } = useQuery({
@@ -37,7 +40,7 @@ export function TopBar() {
 
   return (
     <header
-      className="flex shrink-0 items-center gap-2 border-b border-border bg-surface px-2 sm:px-3"
+      className="topbar-dark flex shrink-0 items-center gap-2 border-b border-border px-2 sm:px-3"
       style={{ height: "var(--spacing-topbar)" }}
     >
       <Button
@@ -55,7 +58,11 @@ export function TopBar() {
       <div
         className={cn(
           "hidden shrink-0 items-center gap-1 lg:flex",
-          isCollapsed ? "w-auto" : "w-[calc(var(--spacing-sidebar)-0.75rem)]",
+          isCollapsed
+            ? "w-auto"
+            : hasTeamRail
+              ? "w-[calc(var(--spacing-sidebar)+var(--spacing-teamrail)-0.75rem)]"
+              : "w-[calc(var(--spacing-sidebar)-0.75rem)]",
         )}
       >
         <div className={cn("min-w-0", !isCollapsed && "flex-1")}>

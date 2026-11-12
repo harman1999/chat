@@ -69,7 +69,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 export default function DesignSystemPage() {
   return (
     <div className="min-h-[100dvh] bg-canvas">
-      <header className="sticky top-0 z-10 flex h-[var(--spacing-topbar)] items-center gap-2 border-b border-border bg-surface px-4">
+      <header className="topbar-dark sticky top-0 z-10 flex h-[var(--spacing-topbar)] items-center gap-2 border-b border-border px-4">
         <AppLogoMark />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-tight text-fg">{APP.name} design system</p>

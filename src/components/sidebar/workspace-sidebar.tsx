@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { ListSkeleton } from "@/components/common";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useTeams } from "@/hooks";
+import { useTeamRail, useTeams } from "@/hooks";
 import { ALL_TEAMS, NO_TEAM, sectionChannels } from "@/lib/team-filter";
 import { channelService, workspaceService } from "@/services";
 import { useUIStore, useWorkspaceStore } from "@/store";
@@ -35,7 +35,7 @@ export function WorkspaceSidebar({
   const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const collapsedGroups = useWorkspaceStore((state) => state.collapsedGroups);
   const teamFilter = useWorkspaceStore((state) => state.teamFilter);
-  const setTeamFilter = useWorkspaceStore((state) => state.setTeamFilter);
+  const { select: selectTeam } = useTeamRail();
   const toggleGroup = useWorkspaceStore((state) => state.toggleGroup);
   const openCreateChannel = useUIStore((state) => state.setCreateChannelOpen);
   const openNewDirectMessage = useUIStore((state) => state.setNewDirectMessageOpen);
@@ -62,7 +62,8 @@ export function WorkspaceSidebar({
   // it always shows everything rather than filter by a choice you cannot see.
   const teamsQuery = useTeams();
   const sections = sectionChannels(channelsQuery.data ?? [], teamsQuery.data ?? [], isCollapsed ? "all" : teamFilter);
-  const showTeamFilter = !isCollapsed && sections.options.length > 0;
+  // On desktop the team column does this job; the drawer has no room for a column.
+  const showTeamFilter = Boolean(onClose) && !isCollapsed && sections.options.length > 0;
   return (
     <div
       className={cn(
@@ -103,7 +104,7 @@ export function WorkspaceSidebar({
             <TeamFilter
               teams={sections.options}
               value={sections.filter}
-              onChange={setTeamFilter}
+              onChange={selectTeam}
               hidden={sections.hidden}
               badges={sections.badges}
             />

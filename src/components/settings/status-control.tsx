@@ -1,12 +1,14 @@
 "use client";
 
 import { Clock, X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { STATUS_PRESETS } from "@/config";
+import { useCurrentUser } from "@/hooks";
 import { userService } from "@/services";
 import { cn } from "@/lib/utils";
 import type { UserStatus } from "@/types";
@@ -32,11 +34,11 @@ function expiryLabel(status: UserStatus): string | null {
  * draft so a half-typed status is never written until the user commits it.
  */
 export function StatusControl({ compact = false }: { compact?: boolean }) {
-  const [status, setStatus] = useState<UserStatus | null>({
-    emoji: "🎧",
-    text: "Heads down",
-    expiresAt: null,
-  });
+  const queryClient = useQueryClient();
+  // The saved status comes from the account; it used to start from a hardcoded
+  // "Heads down" that was never read from or reconciled with the server.
+  const { data: user } = useCurrentUser();
+  const status: UserStatus | null = user?.customStatus ?? null;
   const [isOpen, setIsOpen] = useState(false);
   const [draftText, setDraftText] = useState("");
   const [draftEmoji, setDraftEmoji] = useState("💬");
@@ -51,11 +53,18 @@ export function StatusControl({ compact = false }: { compact?: boolean }) {
     setIsOpen(open);
   };
 
-  const commit = (next: UserStatus | null) => {
-    setStatus(next);
-    void userService.setCustomStatus(next);
-    setIsOpen(false);
-    toast.success(next ? "Status updated" : "Status cleared");
+  const commit = async (next: UserStatus | null) => {
+    try {
+      await userService.setCustomStatus(next);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["current-user"] }),
+        queryClient.invalidateQueries({ queryKey: ["users"] }),
+      ]);
+      setIsOpen(false);
+      toast.success(next ? "Status updated" : "Status cleared");
+    } catch {
+      toast.error("Could not change your status", { description: "Try again in a moment." });
+    }
   };
 
   return (
@@ -101,7 +110,7 @@ export function StatusControl({ compact = false }: { compact?: boolean }) {
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || !draftText.trim()) return;
                 event.preventDefault();
-                commit({
+                void commit({
                   emoji: draftEmoji,
                   text: draftText.trim(),
                   expiresAt: draftMinutes
@@ -166,7 +175,7 @@ export function StatusControl({ compact = false }: { compact?: boolean }) {
               size="sm"
               disabled={!draftText.trim()}
               onClick={() =>
-                commit({
+                void commit({
                   emoji: draftEmoji,
                   text: draftText.trim(),
                   expiresAt: draftMinutes
@@ -186,7 +195,7 @@ export function StatusControl({ compact = false }: { compact?: boolean }) {
           {expiryLabel(status) && (
             <span className="text-2xs text-fg-subtle">{expiryLabel(status)}</span>
           )}
-          <Button variant="ghost" size="sm" onClick={() => commit(null)}>
+          <Button variant="ghost" size="sm" onClick={() => void commit(null)}>
             <X />
             Clear
           </Button>

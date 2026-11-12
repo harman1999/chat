@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { requirePage } from "@server/lib/guard";
-import { ArrowLeft } from "lucide-react";
 import { AppLogoMark } from "@/components/common";
 import { SettingsNav } from "@/components/settings/settings-nav";
-import { ThemeToggle } from "@/components/layout";
-import { Button } from "@/components/ui/button";
+import { ShortcutsDialog } from "@/components/layout";
+import { UserMenu } from "@/components/profile/user-menu";
 import { APP } from "@/lib/constants";
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
@@ -12,7 +11,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-canvas">
-      <header className="sticky top-0 z-10 flex h-[var(--spacing-topbar)] shrink-0 items-center gap-2 border-b border-border bg-surface px-3 sm:px-4">
+      <header className="sticky top-0 z-10 flex h-[var(--spacing-topbar)] shrink-0 items-center gap-2 border-b border-border px-3 topbar-dark sm:px-4">
         {/* The logo is the way home, as it is everywhere else. */}
         <Link href="/workspace" aria-label="Back to the chat" title="Back to the chat" className="shrink-0 rounded-md transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
           <AppLogoMark />
@@ -22,30 +21,29 @@ export default async function SettingsLayout({ children }: { children: React.Rea
           <p className="truncate text-2xs text-fg-subtle">{APP.name}</p>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <ThemeToggle />
-          <Button variant="secondary" size="sm" asChild>
-            <Link href="/workspace">
-              <ArrowLeft />
-              <span className="hidden sm:inline">Back to workspace</span>
-              <span className="sm:hidden">Back</span>
-            </Link>
-          </Button>
+          <UserMenu />
         </div>
       </header>
 
-      {/* Section list becomes a scrollable tab strip below lg. */}
-      <div className="border-b border-border bg-surface lg:hidden">
+      {/* The section list, in the same colours as the workspace sidebar: a
+          scrollable strip below lg, a full-height column from lg up. */}
+      <div className="border-b border-sidebar-border bg-sidebar lg:hidden">
         <SettingsNav orientation="horizontal" />
       </div>
 
-      <div className="mx-auto flex w-full max-w-5xl flex-1 gap-8 px-3 py-6 sm:px-6">
-        <aside className="hidden w-56 shrink-0 lg:block">
-          <div className="sticky top-[calc(var(--spacing-topbar)+1.5rem)]">
+      <div className="flex flex-1">
+        <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
+          <div className="sticky top-[var(--spacing-topbar)] max-h-[calc(100dvh-var(--spacing-topbar))] overflow-y-auto px-2 py-4 scrollbar-sidebar">
             <SettingsNav />
           </div>
         </aside>
-        <main className="min-w-0 flex-1 space-y-8 pb-12">{children}</main>
+        <div className="min-w-0 flex-1 px-3 py-6 sm:px-6">
+          <main className="mx-auto w-full max-w-3xl space-y-8 pb-12">{children}</main>
+        </div>
       </div>
+
+      {/* The profile menu's "Keyboard shortcuts" opens this; the chat screen mounts its own. */}
+      <ShortcutsDialog />
     </div>
   );
 }

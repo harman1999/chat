@@ -1,26 +1,13 @@
 "use client";
 
-import { ChevronsUpDown, LogOut, Settings2, ShieldCheck, UserPlus, UsersRound } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ChevronsUpDown } from "lucide-react";
+import { AppMenu } from "@/components/layout/app-menu";
 import { AppLogoMark, WorkspaceLogo } from "@/components/common";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCanAdminister, usePermission } from "@/hooks";
-import { authService } from "@/services";
 import { APP } from "@/lib/constants";
-import { reloadAs } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
-import { formatMembers } from "@/lib/format";
 import { useWorkspaceStore } from "@/store";
 import type { Workspace } from "@/types";
-import { InvitePeopleDialog } from "./invite-people-dialog";
 
 const PLAN_LABEL: Record<Workspace["plan"], string> = {
   free: "Free",
@@ -43,15 +30,8 @@ export function WorkspaceSwitcher({
   variant?: "sidebar" | "topbar";
 }) {
   const onTopbar = variant === "topbar";
-  const router = useRouter();
   const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const active = workspaces.find((workspace) => workspace.id === workspaceId) ?? workspaces[0];
-  const canManageTeams = usePermission("p_team_manage");
-  const canAdminister = useCanAdminister();
-  // Only offered to people who can actually invite, rather than shown to
-  // everyone and refused on click.
-  const canInvite = usePermission("p_user_invite");
-  const [isInviteOpen, setIsInviteOpen] = useState(false);
 
   // The list is fetched now, so it is briefly empty on first paint.
   if (!active) {
@@ -75,9 +55,11 @@ export function WorkspaceSwitcher({
 
   return (
     <>
-      <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={`Workspace: ${active.name}. Switch workspace`}
+      <AppMenu
+        trigger={
+      <button
+        type="button"
+        aria-label={`${active.name}. Open the menu`}
         className={cn(
           "flex w-full items-center rounded-md text-left transition-colors",
           onTopbar
@@ -118,75 +100,8 @@ export function WorkspaceSwitcher({
             />
           </>
         )}
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent align="start" className="w-72" sideOffset={4}>
-        {/* One fixed workspace: shown as the header of the menu, not as a list to pick from. */}
-        <div className="flex items-center gap-2.5 px-2 py-2">
-          <WorkspaceLogo
-            logoUrl={active.logoUrl}
-            name={active.name}
-            fallback={
-              <span
-                className="grid size-7 shrink-0 place-items-center rounded-md bg-accent text-2xs font-bold text-accent-fg"
-                aria-hidden
-              >
-                {active.initials}
-              </span>
-            }
-          />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-fg">{active.name}</span>
-            <span className="block truncate text-2xs text-fg-subtle">
-              {formatMembers(active.memberCount)} · {PLAN_LABEL[active.plan]}
-            </span>
-          </span>
-        </div>
-
-        {canInvite && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setIsInviteOpen(true)}>
-              <UserPlus />
-              Invite people to {active.name}
-            </DropdownMenuItem>
-          </>
-        )}
-
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => router.push("/settings")}>
-          <Settings2 />
-          Workspace settings
-        </DropdownMenuItem>
-        {canManageTeams && (
-          <DropdownMenuItem onSelect={() => router.push("/admin/teams")}>
-            <UsersRound />
-            Teams
-          </DropdownMenuItem>
-        )}
-        {canAdminister && (
-          <DropdownMenuItem onSelect={() => router.push("/admin")}>
-            <ShieldCheck />
-            Administration
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="danger"
-          onSelect={async () => {
-            await authService.signOut();
-            reloadAs("/login");
-          }}
-        >
-          <LogOut />
-          Sign out of {active.name}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-      </DropdownMenu>
-      <InvitePeopleDialog
-        open={isInviteOpen}
-        onOpenChange={setIsInviteOpen}
-        workspaceName={active.name}
+      </button>
+        }
       />
     </>
   );

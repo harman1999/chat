@@ -19,6 +19,10 @@ const TABS: {
 /**
  * Mobile-only bottom navigation. Sits below the composer and respects the
  * home-indicator safe area.
+ *
+ * Coloured as the sidebar, which it stands in for on a phone, by using the same
+ * tokens: the two are always the same blue and read as one piece of navigation,
+ * instead of a bar under a drawer that does not match it.
  */
 export function MobileTabBar() {
   const activeSection = useWorkspaceStore((state) => state.activeNavSection);
@@ -37,7 +41,7 @@ export function MobileTabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="flex shrink-0 items-stretch border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="flex shrink-0 items-stretch border-t border-sidebar-border bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {TABS.map((tab) => {
         const Icon = tab.icon;
@@ -50,14 +54,20 @@ export function MobileTabBar() {
             aria-current={isActive ? "page" : undefined}
             onClick={() => (tab.id === "search" ? setSearchOpen(true) : setNavSection(tab.id as NavSection))}
             className={cn(
-              "relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[0.625rem] font-medium transition-colors",
-              isActive ? "text-accent" : "text-fg-subtle hover:text-fg-muted",
+              "relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[0.625rem] font-medium transition-colors focus-sidebar",
+              isActive ? "text-sidebar-fg" : "text-sidebar-subtle hover:text-sidebar-fg",
             )}
           >
-            <span className="relative">
+            {/* The current tab sits in a pill, as the current row does in the sidebar. */}
+            <span
+              className={cn(
+                "relative rounded-full px-3.5 py-0.5 transition-colors",
+                isActive && "bg-sidebar-active text-sidebar-active-fg",
+              )}
+            >
               <Icon className="size-[18px]" aria-hidden />
               {badge ? (
-                <span className="absolute -right-1.5 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-[0.5rem] font-bold leading-none text-accent-fg">
+                <span className="absolute -right-0.5 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-accent px-1 text-[0.5rem] font-bold leading-none text-accent-fg ring-2 ring-sidebar">
                   {badge}
                 </span>
               ) : null}
@@ -69,9 +79,11 @@ export function MobileTabBar() {
       <button
         type="button"
         onClick={() => setDrawerOpen(true)}
-        className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[0.625rem] font-medium text-fg-subtle transition-colors hover:text-fg-muted"
+        className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[0.625rem] font-medium text-sidebar-subtle transition-colors hover:text-sidebar-fg focus-sidebar"
       >
-        <MoreHorizontal className="size-[18px]" aria-hidden />
+        <span className="px-3.5 py-0.5">
+          <MoreHorizontal className="size-[18px]" aria-hidden />
+        </span>
         More
       </button>
     </nav>

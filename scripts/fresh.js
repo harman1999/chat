@@ -1,0 +1,2 @@
+(async () => { await new Promise(r => setTimeout(r, 4500));
+  return JSON.stringify({ path: location.pathname, title: document.querySelector('main h1, header h1')?.textContent, sidebarChannels: [...document.querySelectorAll('aside section')].map(s => s.querySelector('button[aria-expanded]')?.textContent.trim()).filter(Boolean), teamColumn: !!document.querySelector('nav[aria-label="Teams"]'), errorOverlay: !!document.querySelector('nextjs-portal')?.shadowRoot?.querySelector('[data-nextjs-dialog]') }); })()

@@ -17,7 +17,7 @@ export function PhasePlaceholder({
 }) {
   return (
     <div className="flex min-h-[100dvh] flex-col bg-canvas">
-      <header className="flex h-[var(--spacing-topbar)] shrink-0 items-center gap-2 border-b border-border bg-surface px-3">
+      <header className="topbar-dark flex h-[var(--spacing-topbar)] shrink-0 items-center gap-2 border-b border-border px-3">
         <AppLogoMark />
         <span className="text-sm font-semibold tracking-tight text-fg">{APP.name}</span>
         <Button variant="ghost" size="sm" asChild className="ml-auto">

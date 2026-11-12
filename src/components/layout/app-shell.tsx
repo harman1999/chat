@@ -4,9 +4,9 @@ import * as React from "react";
 import { ChannelDialogs } from "@/components/chat/channel-dialogs";
 import { SearchDialog } from "@/components/search";
 import { WorkspaceBootstrap } from "@/components/workspace/workspace-bootstrap";
-import { WorkspaceSidebar } from "@/components/sidebar";
+import { TeamRail, WorkspaceSidebar } from "@/components/sidebar";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { useHotkeys, useMediaQuery, useRealtimeBridge } from "@/hooks";
+import { useHotkeys, useMediaQuery, useRealtimeBridge, useTeamRail } from "@/hooks";
 import { cn } from "@/lib/utils";
 import { useUIStore, useWorkspaceStore } from "@/store";
 import { RightPanel } from "./right-panel";
@@ -49,6 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const showRightPanel = isRightPanelOpen && (activeNavSection === "home" || isThreadOpen);
 
   useRealtimeBridge();
+  const teamRail = useTeamRail();
 
   useHotkeys(
     React.useMemo(
@@ -76,6 +77,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <TopBar />
 
       <div className="flex min-h-0 flex-1">
+        {/* Team tiles beside the channel list — desktop, when there are teams. Below
+            lg the drawer has a picker instead, which has room for a name. */}
+        {teamRail.isVisible && (
+          <div className="hidden shrink-0 lg:block">
+            <TeamRail sections={teamRail.sections} onSelect={teamRail.select} />
+          </div>
+        )}
+
         {/* Inline sidebar — desktop and large tablets */}
         <aside
           aria-label="Workspace"
