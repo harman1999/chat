@@ -1,4 +1,4 @@
-import { handler, noContent, problem } from "@server/lib/http";
+import { discardBody, handler, noContent, problem } from "@server/lib/http";
 import { UPLOAD_RULE } from "@server/lib/rate-limit";
 import { query, queryOne } from "@server/db/client";
 import { requireSession } from "@server/lib/session";
@@ -39,6 +39,7 @@ export const PUT = handler(async (request: Request, ctx: { params: Promise<{ id:
   // length before buffering, then reconcile against the reservation after.
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > MAX_UPLOAD_BYTES) {
+    await discardBody(request);
     return problem(413, "file_too_large", "Files must be 50 MB or smaller");
   }
 

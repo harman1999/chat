@@ -103,6 +103,29 @@ export class ValidationError extends Error {
 const MAX_BODY_BYTES = 1024 * 1024;
 
 /**
+ * Reads and throws away a refused request's body, up to a cap.
+ *
+ * Answering 413 and leaving the body unread strands the connection: the next
+ * request on it was reset about five seconds later. Chunks are dropped as they
+ * arrive, so nothing is buffered, and past the cap the rest is cancelled.
+ */
+export async function discardBody(request: Request, cap = 16 * 1024 * 1024): Promise<void> {
+  const reader = request.body?.getReader();
+  if (!reader) return;
+  let seen = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      seen += value.byteLength;
+      if (seen > cap) return void (await reader.cancel());
+    }
+  } catch {
+    /* the client went away; nothing left to drain */
+  }
+}
+
+/**
  * Parses and validates a JSON body against a schema.
  *
  * Replaces the previous `readJson<T>`, whose generic was a compile-time cast
@@ -113,6 +136,7 @@ const MAX_BODY_BYTES = 1024 * 1024;
 export async function parseBody<T>(request: Request, schema: ZodType<T>): Promise<T> {
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > MAX_BODY_BYTES) {
+    await discardBody(request);
     throw new ValidationError([{ path: "", message: "Request body is too large" }]);
   }
 

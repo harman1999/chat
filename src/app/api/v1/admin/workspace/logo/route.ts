@@ -1,4 +1,4 @@
-import { handler, json, noContent, problem } from "@server/lib/http";
+import { discardBody, handler, json, noContent, problem } from "@server/lib/http";
 import { audit } from "@server/lib/audit";
 import { requirePermission } from "@server/lib/permissions";
 import { UPLOAD_RULE } from "@server/lib/rate-limit";
@@ -14,6 +14,7 @@ export const PUT = handler(async (request: Request) => {
 
   // Refuse on the declared length before buffering, then check what arrived.
   if (Number(request.headers.get("content-length") ?? 0) > MAX_LOGO_BYTES) {
+    await discardBody(request);
     return problem(413, "file_too_large", TOO_LARGE);
   }
   const data = Buffer.from(await request.arrayBuffer());
