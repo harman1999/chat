@@ -39,6 +39,34 @@ import { mockResolve, request, USE_MOCK_TRANSPORT } from "./http";
  * authorisation boundary — the API will gate this whole surface on the
  * `p_admin_*` permissions rather than channel membership.
  */
+/** The single sign-on setting as an administrator sees it. The secret is never part of it. */
+export interface SsoSettings {
+  enabled: boolean;
+  label: string;
+  issuer: string;
+  clientId: string;
+  hasSecret: boolean;
+  allowedDomains: string[];
+  autoCreate: boolean;
+  enforced: boolean;
+  /** Where the provider must be told to send people back to. */
+  redirectUri: string;
+}
+
+export type SsoInput = Omit<SsoSettings, "hasSecret" | "redirectUri"> & { clientSecret?: string };
+
+const emptySso: SsoSettings = {
+  enabled: false,
+  label: "Single sign-on",
+  issuer: "",
+  clientId: "",
+  hasSecret: false,
+  allowedDomains: [],
+  autoCreate: false,
+  enforced: false,
+  redirectUri: "",
+};
+
 export const adminService = {
   async stats(): Promise<WorkspaceStats> {
     if (USE_MOCK_TRANSPORT) return mockResolve(workspaceStats, 260);
@@ -270,6 +298,23 @@ export const adminService = {
   async storage(): Promise<StorageBucket[]> {
     if (USE_MOCK_TRANSPORT) return mockResolve(storageBuckets, 240);
     return request<StorageBucket[]>("/admin/storage");
+  },
+
+  async sso(): Promise<SsoSettings> {
+    if (USE_MOCK_TRANSPORT) return mockResolve(emptySso, 120);
+    return request<SsoSettings>("/admin/sso");
+  },
+
+  /** Leave `clientSecret` out to keep the stored one; it is never returned. */
+  async saveSso(input: SsoInput): Promise<SsoSettings> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ ...emptySso, ...input, hasSecret: true }, 200);
+    return request<SsoSettings>("/admin/sso", { method: "PUT", body: input });
+  },
+
+  /** Can this issuer address be reached, and is it what it says? */
+  async testSso(issuer: string): Promise<{ ok: true }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ ok: true as const }, 200);
+    return request<{ ok: true }>("/admin/sso/test", { method: "POST", body: { issuer } });
   },
 
   async settings(): Promise<SystemSettings> {

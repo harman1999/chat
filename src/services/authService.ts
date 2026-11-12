@@ -15,9 +15,15 @@ export interface WorkspaceChoice {
   name: string;
 }
 
+export interface SsoOptions {
+  enabled: boolean;
+  label: string;
+  /** Passwords are switched off for everyone but the owner. */
+  enforced: boolean;
+}
+
 export interface Session {
   user: User;
-  accessToken: string;
   expiresAt: string;
 }
 
@@ -26,7 +32,6 @@ export const authService = {
     if (USE_MOCK_TRANSPORT) {
       return mockResolve({
         user: currentUser,
-        accessToken: "mock-access-token",
         expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
       });
     }
@@ -36,6 +41,12 @@ export const authService = {
   async signOut(): Promise<void> {
     if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 80);
     return request<void>("/auth/logout", { method: "POST" });
+  },
+
+  /** Whether the sign-in page should offer single sign-on, and under what name. */
+  async ssoOptions(workspace?: string): Promise<SsoOptions> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ enabled: false, label: "", enforced: false }, 80);
+    return request<SsoOptions>(`/auth/sso/options${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ""}`);
   },
 
   /** Emails a reset link. The answer is the same whether or not the address has an account. */

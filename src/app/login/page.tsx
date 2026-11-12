@@ -18,9 +18,9 @@ function safeNext(value: string | undefined): string {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; workspace?: string }>;
+  searchParams: Promise<{ next?: string; workspace?: string; sso_error?: string }>;
 }) {
-  const { next, workspace } = await searchParams;
+  const { next, workspace, sso_error: ssoError } = await searchParams;
   const destination = safeNext(next);
 
   // Already signed in? Skip the form.
@@ -29,5 +29,5 @@ export default async function LoginPage({
   // signing out of one to sign in to another. Otherwise sign-in works it out
   // from the email.
   const named = workspace ? await workspacesRepo.bySlug(workspace) : null;
-  return <LoginForm next={destination} workspace={named ?? undefined} />;
+  return <LoginForm next={destination} workspace={named ?? undefined} ssoError={ssoError} />;
 }

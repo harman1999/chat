@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, ArrowRight, KeyRound, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { AppLogo } from "@/components/common";
@@ -14,17 +15,43 @@ import { initialsOf } from "@/lib/format";
 import { reloadAs } from "@/lib/navigation";
 import { isApiError, USE_MOCK_TRANSPORT } from "@/services/http";
 
+/** What the single sign-on callback sends back as `?sso_error=`, in words. */
+const SSO_ERRORS: Record<string, string> = {
+  not_configured: "Single sign-on is not set up for this workspace.",
+  denied: "The sign-in was cancelled or refused by the provider.",
+  expired: "That sign-in took too long or was already used. Please try again.",
+  failed: "Single sign-on could not be completed. Try again, or ask an administrator.",
+  no_email: "The provider did not share a verified email address, so we cannot match you to an account.",
+  no_account: "No account matches that email. Ask an administrator to invite you.",
+  domain_not_allowed: "That email address is not allowed to sign in here.",
+  deactivated: "This account has been deactivated.",
+};
+
 export function LoginForm({
   next = "/workspace",
   workspace,
+  ssoError,
 }: {
   next?: string;
   /** Set when the link named a workspace; otherwise it is worked out from the email. */
   workspace?: WorkspaceChoice;
+  /** From `?sso_error=` after a failed single sign-on attempt. */
+  ssoError?: string;
 }) {
   const [email, setEmail] = useState("harman.singh@northwind.io");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(ssoError ? (SSO_ERRORS[ssoError] ?? SSO_ERRORS.failed) : null);
+  const { data: sso } = useQuery({
+    queryKey: ["sso-options", workspace?.slug ?? null],
+    queryFn: () => authService.ssoOptions(workspace?.slug),
+    retry: false,
+    staleTime: 60_000,
+  });
+  // When single sign-on is required, the password form is for the owner only,
+  // so it stays out of the way until asked for.
+  const [showPassword, setShowPassword] = useState(false);
+  const passwordFormVisible = !sso?.enforced || showPassword;
+  const ssoHref = `/api/v1/auth/sso/start?next=${encodeURIComponent(next)}${workspace ? `&workspace=${encodeURIComponent(workspace.slug)}` : ""}`;
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Filled when the email has accounts in several workspaces and the password
   // matched more than one: the person picks which to enter.
@@ -123,6 +150,36 @@ export function LoginForm({
           {workspace && <p className="mt-1 text-sm text-fg-muted">{workspace.name}</p>}
         </div>
 
+        {sso?.enabled && (
+          <div className="mb-3 space-y-3 rounded-xl border border-border bg-surface p-5 shadow-sm">
+            <Button asChild variant="primary" size="lg" className="w-full">
+              <a href={ssoHref}>
+                <KeyRound />
+                Sign in with {sso.label}
+              </a>
+            </Button>
+            {error && !passwordFormVisible && (
+              <p
+                role="alert"
+                className="flex items-center gap-1.5 rounded-md bg-danger-subtle px-2.5 py-2 text-xs text-danger"
+              >
+                <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+                {error}
+              </p>
+            )}
+            {sso.enforced && !showPassword && (
+              <button
+                type="button"
+                onClick={() => setShowPassword(true)}
+                className="block w-full text-center text-2xs text-fg-subtle hover:text-fg hover:underline"
+              >
+                Owner sign-in with a password
+              </button>
+            )}
+          </div>
+        )}
+
+        {passwordFormVisible && (
         <form
           onSubmit={submit}
           className="space-y-3.5 rounded-xl border border-border bg-surface p-5 shadow-sm"
@@ -178,11 +235,8 @@ export function LoginForm({
             {isSubmitting && <Loader2 className="animate-spin" />}
             Sign in
           </Button>
-
-          <p className="text-center text-2xs text-fg-subtle">
-            Single sign-on through Okta is configured for this workspace.
-          </p>
         </form>
+        )}
 
         {/* Seeded credentials, shown only while running against local fixtures. */}
         {!USE_MOCK_TRANSPORT && (

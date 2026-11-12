@@ -51,6 +51,16 @@ services:
       timeout: 3s
       retries: 20
 
+  # A stand-in single sign-on provider for trying the sign-in flow locally. Not
+  # started by default: `docker compose --profile sso up -d mock-oidc`.
+  # Issuer: http://localhost:8099/helix
+  mock-oidc:
+    image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+    container_name: helix-mock-oidc
+    profiles: ["sso"]
+    ports:
+      - "8099:8080"
+
 volumes:
   helix-pgdata:
   helix-redisdata:

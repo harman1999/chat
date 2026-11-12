@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { adminService } from "@/services";
 import { isApiError } from "@/services/http";
 import { AdminPage } from "./admin-page";
+import { SsoSettings } from "./sso-settings";
 
 /** Mirrors the server, which refuses shorter passwords whoever sets them. */
 const MIN_PASSWORD_LENGTH = 12;
@@ -21,8 +22,8 @@ const SESSION_CHOICES = [
 /**
  * Sign-in policy: only what the application really does.
  *
- * Email and password is the one way in; there is no single sign-on or directory
- * sync to configure. The minimum length is fixed in the server, so it is
+ * Email and password, plus single sign-on through OpenID Connect when it is set
+ * up. There is no directory sync. The minimum length is fixed in the server, so it is
  * stated, not offered as a setting. Session length is real: it is stored on the
  * workspace and applied to every new sign-in.
  */
@@ -63,9 +64,11 @@ export function AuthenticationAdmin() {
         <SettingSection title="Sign-in" description="What people can use to get in.">
           <SettingRow
             label="Email and password"
-            description="The only sign-in method. Single sign-on and directory sync are not available."
+            description="Always available to the owner. For everyone else it works unless single sign-on is required below."
           />
         </SettingSection>
+
+        <SsoSettings />
 
         <SettingSection title="Passwords" description="Rules every password has to meet.">
           <SettingRow
