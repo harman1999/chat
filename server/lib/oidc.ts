@@ -71,7 +71,23 @@ async function request(rawUrl: string, init: RequestInit = {}): Promise<unknown>
     // the reason is on the cause.
     console.error("[oidc] request failed:", rawUrl, error);
     const reason = (error as { cause?: { code?: string } })?.cause?.code ?? (error as { code?: string })?.code;
-    throw new OidcError(`Could not reach the provider${reason ? ` (${reason})` : ""}`);
+    let host = "the provider";
+    try {
+      host = new URL(rawUrl).host;
+    } catch {
+      /* keep the generic wording */
+    }
+    const hint =
+      reason === "ENOTFOUND" || reason === "EAI_AGAIN"
+        ? "the name could not be found — check the address for typos"
+        : reason === "ECONNREFUSED"
+          ? "nothing is listening there — check the address and port"
+          : reason === "ETIMEDOUT" || reason === "UND_ERR_CONNECT_TIMEOUT"
+            ? "it did not answer — a firewall may be blocking this server"
+            : reason
+              ? reason
+              : "check the address, and that this server can reach it";
+    throw new OidcError(`Could not reach ${host}: ${hint}.`);
   } finally {
     clearTimeout(timer);
   }

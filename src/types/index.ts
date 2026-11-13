@@ -84,11 +84,19 @@ export interface MessagePreferences {
   groupConsecutive: boolean;
 }
 
+/** Custom colours for the two bars; null means the theme's own colour. */
+export interface AppearancePreferences {
+  /** `#rrggbb`. */
+  sidebarColor: string | null;
+  topbarColor: string | null;
+}
+
 export interface UserPreferences {
   theme: ThemePreference;
   density: Density;
   language: string;
   timezone: string;
+  appearance: AppearancePreferences;
   messages: MessagePreferences;
   notifications: NotificationPreferences;
 }

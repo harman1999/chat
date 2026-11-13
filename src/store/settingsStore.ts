@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { defaultPreferences } from "@/config";
 import type {
+  AppearancePreferences,
   MessagePreferences,
   NotificationPreferences,
   UserPreferences,
@@ -21,6 +22,10 @@ interface SettingsState extends UserPreferences {
   setDensity: (density: UserPreferences["density"]) => void;
   setLanguage: (language: string) => void;
   setTimezone: (timezone: string) => void;
+  setAppearanceColor: <K extends keyof AppearancePreferences>(
+    key: K,
+    value: AppearancePreferences[K],
+  ) => void;
   setMessagePreference: <K extends keyof MessagePreferences>(
     key: K,
     value: MessagePreferences[K],
@@ -43,6 +48,9 @@ export const useSettingsStore = create<SettingsState>()(
       setLanguage: (language) => set({ language }),
       setTimezone: (timezone) => set({ timezone }),
 
+      setAppearanceColor: (key, value) =>
+        set((state) => ({ appearance: { ...state.appearance, [key]: value } })),
+
       setMessagePreference: (key, value) =>
         set((state) => ({ messages: { ...state.messages, [key]: value } })),
 
@@ -60,6 +68,7 @@ export const useSettingsStore = create<SettingsState>()(
       merge: (persisted, current) => ({
         ...current,
         ...(persisted as Partial<SettingsState>),
+        appearance: { ...current.appearance, ...(persisted as SettingsState)?.appearance },
         messages: { ...current.messages, ...(persisted as SettingsState)?.messages },
         notifications: {
           ...current.notifications,

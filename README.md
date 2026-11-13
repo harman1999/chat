@@ -543,6 +543,22 @@ Administration and Integrations (only for people allowed to use them), Invite
 people, About and Sign out, with your current place ticked. It appears only in
 the chat workspace; Settings and Administration have their own navigation.
 
+### Bar colours
+
+**Settings → Appearance → Bar colours** lets each person choose the colour of the
+sidebar and of the top bar separately: the browser's colour picker (any colour), a
+box for a hex code, and a row of ready-made colours. The change shows at once on
+the page, is saved on the account (so it follows you to other devices), and applies
+in light and dark themes alike; "Reset" returns a bar to the theme's own colour.
+
+Everything else is worked out from the one colour (`src/lib/appearance-colors.ts`):
+which way the text goes, secondary text, hover and selected states, borders and the
+search field, held to WCAG contrast (tested across 680 colours, every hue and
+lightness, the worst cases still about 4.5:1 for text). Values are stored as
+`#rrggbb` only — the server refuses anything else, since they end up in a style
+property — and cached in `localStorage` so a small script in the page head can
+restore them before the first paint, with no flash of the default.
+
 ### Status and availability
 
 Availability (Online, Away, Do not disturb) and a custom status ("Lunch", with an

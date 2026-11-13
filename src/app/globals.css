@@ -58,10 +58,13 @@
      restored in the .dark block below. One colour, and every other step is mixed
      from it, so changing --sidebar keeps the lift for hover, the tiles, the
      selected row and the borders in balance. The mobile tab bar uses the same
-     tokens, and the top bar (.topbar-dark, below) is mixed from this colour too.
+     tokens. The top bar (.topbar-dark, below) is mixed from --topbar-base, which
+     starts as the same blue but is its own value, so a person who picks a new
+     sidebar colour does not change the top bar (or the other way round).
      Text steps are mixed toward white and measured for contrast on this base
      (the handover records the ratios). */
   --sidebar: #020031;
+  --topbar-base: #020031;
   --sidebar-elevated: color-mix(in oklch, var(--sidebar), white 13%);
   --sidebar-hover: color-mix(in oklch, var(--sidebar), white 9%);
   --sidebar-active: color-mix(in oklch, var(--sidebar), white 24%);
@@ -323,16 +326,34 @@
      two are always one family: the bar is that blue a little deeper, and the
      search field and hover states sit a step lighter. */
   :root:not(.dark) .topbar-dark {
-    --surface: color-mix(in oklch, var(--sidebar), black 22%);
-    --surface-subtle: color-mix(in oklch, var(--sidebar), white 7%);
+    --surface: color-mix(in oklch, var(--topbar-base), black 22%);
+    --surface-subtle: color-mix(in oklch, var(--topbar-base), white 7%);
     --surface-raised: var(--surface-subtle);
-    --surface-hover: color-mix(in oklch, var(--sidebar), white 11%);
-    --surface-active: color-mix(in oklch, var(--sidebar), white 17%);
+    --surface-hover: color-mix(in oklch, var(--topbar-base), white 11%);
+    --surface-active: color-mix(in oklch, var(--topbar-base), white 17%);
     --fg: oklch(0.99 0.004 268);
-    --fg-muted: color-mix(in oklch, var(--sidebar), white 88%);
-    --fg-subtle: color-mix(in oklch, var(--sidebar), white 76%);
-    --border: color-mix(in oklch, var(--sidebar), white 14%);
-    --border-strong: color-mix(in oklch, var(--sidebar), white 24%);
+    --fg-muted: color-mix(in oklch, var(--topbar-base), white 88%);
+    --fg-subtle: color-mix(in oklch, var(--topbar-base), white 76%);
+    --border: color-mix(in oklch, var(--topbar-base), white 14%);
+    --border-strong: color-mix(in oklch, var(--topbar-base), white 24%);
+  }
+
+  /* A colour the person has chosen for the top bar (set on the root by
+     lib/appearance-colors.ts). Every token is worked out from that one colour,
+     including which way the text goes, and it applies in light and dark alike.
+     Listed after the rules above so it wins over both. */
+  :root[data-topbar-custom] .topbar-dark {
+    background-color: var(--topbar-surface);
+    --surface: var(--topbar-surface);
+    --surface-subtle: var(--topbar-surface-subtle);
+    --surface-raised: var(--topbar-surface-subtle);
+    --surface-hover: var(--topbar-surface-hover);
+    --surface-active: var(--topbar-surface-active);
+    --fg: var(--topbar-fg);
+    --fg-muted: var(--topbar-fg-muted);
+    --fg-subtle: var(--topbar-fg-subtle);
+    --border: var(--topbar-border);
+    --border-strong: var(--topbar-border-strong);
   }
 
   /* Scoped focus ring for the sidebar, whose background differs from the page's */

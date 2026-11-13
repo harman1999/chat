@@ -6,6 +6,7 @@ export const defaultPreferences: UserPreferences = {
   density: "comfortable",
   language: "en-GB",
   timezone: "Asia/Kolkata",
+  appearance: { sidebarColor: null, topbarColor: null },
   messages: {
     sendBehavior: "enter",
     use24HourTime: false,
@@ -37,6 +38,7 @@ export function withDefaults(stored?: Partial<UserPreferences> | null): UserPref
   return {
     ...d,
     ...stored,
+    appearance: { ...d.appearance, ...stored?.appearance },
     messages: { ...d.messages, ...stored?.messages },
     notifications: {
       ...d.notifications,

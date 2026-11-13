@@ -127,6 +127,12 @@ export const preferencesSchema = z
     density: z.enum(["comfortable", "compact"]),
     language: z.string().trim().max(32),
     timezone: z.string().trim().max(64),
+    // Strictly `#rrggbb` or null. The value ends up in a style property, so
+    // nothing else — no names, no functions, no url() — is accepted.
+    appearance: z.object({
+      sidebarColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(),
+      topbarColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(),
+    }),
     messages: z.object({
       sendBehavior: z.enum(["enter", "mod_enter"]),
       use24HourTime: z.boolean(),

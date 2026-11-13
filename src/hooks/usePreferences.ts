@@ -3,7 +3,15 @@
 import { useCallback } from "react";
 import { userService } from "@/services";
 import { useSettingsStore } from "@/store";
-import type { MessagePreferences, NotificationPreferences, UserPreferences } from "@/types";
+import type {
+  AppearancePreferences,
+  MessagePreferences,
+  NotificationPreferences,
+  UserPreferences,
+} from "@/types";
+
+/** Pending write of the colour choice; see setAppearanceColor. */
+let saveAppearanceTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * Preference setters that update the store immediately and write through to the
@@ -32,6 +40,23 @@ export function usePreferences() {
     void userService.updatePreferences({ timezone });
   }, []);
 
+  /**
+   * A colour picker fires on every drag, so the page changes at once but the
+   * account is only written when the person pauses.
+   */
+  const setAppearanceColor = useCallback(
+    <K extends keyof AppearancePreferences>(key: K, value: AppearancePreferences[K]) => {
+      useSettingsStore.getState().setAppearanceColor(key, value);
+      if (saveAppearanceTimer) clearTimeout(saveAppearanceTimer);
+      saveAppearanceTimer = setTimeout(() => {
+        void userService.updatePreferences({
+          appearance: { ...useSettingsStore.getState().appearance },
+        });
+      }, 400);
+    },
+    [],
+  );
+
   const setMessagePreference = useCallback(
     <K extends keyof MessagePreferences>(key: K, value: MessagePreferences[K]) => {
       useSettingsStore.getState().setMessagePreference(key, value);
@@ -58,6 +83,7 @@ export function usePreferences() {
     setDensity,
     setLanguage,
     setTimezone,
+    setAppearanceColor,
     setMessagePreference,
     setNotificationPreference,
   };

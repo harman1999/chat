@@ -9,6 +9,7 @@ import { useCurrentUser, useMounted, usePreferences } from "@/hooks";
 import { useUsers } from "@/hooks";
 import { cn } from "@/lib/utils";
 import type { Density, ThemePreference } from "@/types";
+import { ColourSettings } from "./colour-settings";
 import { SegmentedControl, SettingRow, SettingSection } from "./setting-primitives";
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; preview: string }[] = [
@@ -97,6 +98,8 @@ export function AppearanceSettings() {
           </div>
         </SettingRow>
       </SettingSection>
+
+      <ColourSettings />
 
       <SettingSection title="Density" description="How much breathing room messages get.">
         <SettingRow

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { useTheme } from "next-themes";
+import { applyAppearance } from "@/lib/appearance-colors";
 import { userService } from "@/services";
 import { useSettingsStore } from "@/store";
 
@@ -15,7 +16,8 @@ const SIGNED_IN_AREAS = ["/workspace", "/settings", "/admin"];
  *
  * Density lives as a root attribute so every surface — chat, threads and the
  * settings preview — reads the same CSS variables, and the theme preference is
- * kept in step with next-themes on load.
+ * kept in step with next-themes on load. Custom sidebar and top bar colours are
+ * set as CSS variables on the root (see lib/appearance-colors.ts).
  *
  * It also loads the account's saved preferences. The store is a local copy so
  * the screen can paint at once, but it belongs to one browser: without this, a
@@ -25,6 +27,8 @@ const SIGNED_IN_AREAS = ["/workspace", "/settings", "/admin"];
 export function PreferencesEffects() {
   const density = useSettingsStore((state) => state.density);
   const theme = useSettingsStore((state) => state.theme);
+  const sidebarColor = useSettingsStore((state) => state.appearance.sidebarColor);
+  const topbarColor = useSettingsStore((state) => state.appearance.topbarColor);
   const { setTheme, theme: activeTheme } = useTheme();
 
   const pathname = usePathname();
@@ -46,6 +50,11 @@ export function PreferencesEffects() {
   useEffect(() => {
     document.documentElement.dataset.density = density;
   }, [density]);
+
+  // The sidebar and top bar colours, when the person has chosen their own.
+  useEffect(() => {
+    applyAppearance({ sidebarColor, topbarColor });
+  }, [sidebarColor, topbarColor]);
 
   useEffect(() => {
     if (activeTheme && activeTheme !== theme) setTheme(theme);
