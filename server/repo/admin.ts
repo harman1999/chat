@@ -85,9 +85,11 @@ export const adminRepo = {
         created_at: Date;
         message_count: string;
         member_role_id: string | null;
+        two_factor: boolean;
       }
     >(
       `SELECT ${USER_COLUMNS}, u.account_status, u.role_id, u.last_sign_in_at,
+              EXISTS (SELECT 1 FROM user_totp t WHERE t.user_id = u.id) AS two_factor,
               u.created_at,
               (SELECT count(*) FROM messages m WHERE m.author_id = u.id) AS message_count,
               (SELECT r.id FROM roles r WHERE r.workspace_id = u.workspace_id AND r.kind = 'member') AS member_role_id
@@ -104,6 +106,7 @@ export const adminRepo = {
       lastSignInAt: row.last_sign_in_at?.toISOString() ?? null,
       createdAt: row.created_at.toISOString(),
       messageCount: Number(row.message_count),
+      twoFactorEnabled: row.two_factor,
     }));
   },
 

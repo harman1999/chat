@@ -130,6 +130,7 @@ function generateDirectory(): AdminUser[] {
     lastSignInAt: hoursAgo(index * 3),
     createdAt: daysAgo(400 - index * 17),
     messageCount: 2400 - index * 137,
+    twoFactorEnabled: index % 2 === 0,
   }));
 
   const generated: AdminUser[] = Array.from({ length: 48 }, (_, index) => {
@@ -162,6 +163,7 @@ function generateDirectory(): AdminUser[] {
       lastSignInAt: status === "invited" ? null : daysAgo((index % 21) + 0.2),
       createdAt: daysAgo(360 - index * 6),
       messageCount: status === "invited" ? 0 : 40 + ((index * 53) % 900),
+      twoFactorEnabled: index % 3 === 0,
     };
   });
 
@@ -248,6 +250,7 @@ export const systemSettings: SystemSettings = {
   fileRetentionDays: 730,
   maxUploadMb: 50,
   sessionTimeoutHours: 720,
+  twoFactorRequired: false,
 };
 
 /* -------------------------------------------------------------------------- */

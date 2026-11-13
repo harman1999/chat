@@ -59,6 +59,6 @@ run from a scratch folder.
 - `script-src` allows inline scripts (Next.js needs per-request nonces to drop this). Output encoding is the real XSS defence today.
 - Expensive password hashing means a distributed attacker can saturate sign-in capacity (~10/s) and delay legitimate sign-ins; rate-limit `/api/v1/auth/*` at the proxy too.
 - Until each person signs in once after the hashing upgrade, an old-hash account answers a wrong password ~40 ms slower than an unknown address.
-- No two-factor sign-in and no account-lockout notification (see `pendingtask.md`).
+- Two-factor sign-in was added afterwards (2026-11-14, README → Two-factor sign-in). There is still no account-lockout notification (see `pendingtask.md`).
 - Set `TRUSTED_PROXY_HOPS` correctly in production; too high lets clients choose their address.
 - Re-run `npm audit --omit=dev` on every release.

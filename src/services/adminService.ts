@@ -112,6 +112,12 @@ export const adminService = {
     return request<{ password: string; username: string }>(`/admin/users/${userId}/password`, { method: "POST" });
   },
 
+  /** Turns off their two-factor sign-in (a lost phone) and ends their sessions. */
+  async resetTwoFactor(userId: ID): Promise<void> {
+    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 300);
+    return request<void>(`/admin/users/${userId}/two-factor`, { method: "DELETE" });
+  },
+
   async setUserStatus(userId: ID, status: AdminUser["status"]): Promise<void> {
     if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 260);
     return request<void>(`/admin/users/${userId}/status`, { method: "PUT", body: { status } });

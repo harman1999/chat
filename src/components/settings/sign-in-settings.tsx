@@ -11,6 +11,7 @@ import { useCurrentUser } from "@/hooks";
 import { userService } from "@/services";
 import { isApiError } from "@/services/http";
 import { SettingRow, SettingSection } from "./setting-primitives";
+import { TwoFactorSection } from "./two-factor-settings";
 
 function EmailSection() {
   const queryClient = useQueryClient();
@@ -212,9 +213,10 @@ function PasswordSection() {
 /** Email and password, shown at the foot of the Profile page. */
 export function SignInSettings() {
   return (
-    <SettingSection title="Sign-in" description="The email and password you sign in with.">
+    <SettingSection title="Sign-in" description="The email and password you sign in with, and an extra code if you want one.">
       <EmailSection />
       <PasswordSection />
+      <TwoFactorSection />
     </SettingSection>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Ban, Check, KeyRound, MoreHorizontal, ShieldCheck, UserPlus } from "lucide-react";
+import { Ban, Check, KeyRound, MoreHorizontal, ShieldCheck, ShieldOff, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { UserAvatar } from "@/components/common";
@@ -116,6 +116,33 @@ export function UsersAdmin() {
       },
     });
 
+  const askToResetTwoFactor = (row: AdminUser) =>
+    setConfirm({
+      title: `Turn off ${row.displayName}'s two-factor sign-in?`,
+      destructive: true,
+      confirmLabel: "Yes, turn it off",
+      cancelLabel: "No",
+      description: (
+        <>
+          For someone who has lost their phone and their recovery codes. They are signed out everywhere and can
+          sign in with their password again — and set two-factor up afresh, if your workspace requires it.
+          Only do this once you are sure it is really them asking.
+        </>
+      ),
+      onConfirm: async () => {
+        try {
+          await adminService.resetTwoFactor(row.id);
+          await usersQuery.refetch();
+          toast.success("Two-factor turned off", { description: row.displayName });
+        } catch (error) {
+          toast.error("Could not turn off two-factor", {
+            description: isApiError(error) ? error.message : undefined,
+          });
+          throw error;
+        }
+      },
+    });
+
   const usersQuery = useQuery({ queryKey: ["admin-users"], queryFn: () => adminService.listUsers() });
   const rolesQuery = useQuery({ queryKey: ["admin-roles"], queryFn: () => adminService.listRoles() });
 
@@ -164,6 +191,17 @@ export function UsersAdmin() {
           {row.status}
         </Badge>
       ),
+    },
+    {
+      id: "twoFactor",
+      header: "Two-factor",
+      sortValue: (row) => (row.twoFactorEnabled ? 1 : 0),
+      cell: (row) =>
+        row.twoFactorEnabled ? (
+          <Badge variant="success" size="sm">On</Badge>
+        ) : (
+          <span className="text-2xs text-fg-subtle">Off</span>
+        ),
     },
     {
       id: "messages",
@@ -233,6 +271,12 @@ export function UsersAdmin() {
               <KeyRound />
               Reset password
             </DropdownMenuItem>
+            {row.twoFactorEnabled && (
+              <DropdownMenuItem disabled={row.id === currentUserId} onSelect={() => askToResetTwoFactor(row)}>
+                <ShieldOff />
+                Reset two-factor
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             {row.status === "deactivated" ? (
               <DropdownMenuItem onSelect={() => void reactivate(row)}>

@@ -50,15 +50,22 @@ export async function sessionLifetimeSeconds(userId: string): Promise<number> {
   return Number.isInteger(hours) && hours >= 1 && hours <= 8_760 ? hours * 3_600 : env.sessionTtlSeconds;
 }
 
+/** Without "remember me", a sign-in lasts this long at most — and the cookie goes when the browser closes. */
+export const SHORT_SESSION_SECONDS = 12 * 3_600;
+
 export async function createSession(
   userId: string,
   request?: Request,
+  remember = true,
 ): Promise<{ token: string; sessionId: string; expiresAt: Date; lifetimeSeconds: number }> {
   // `token` goes to the browser once, in the cookie. `sessionId` — its hash — is
   // the only form that is stored, keyed on, or ever shown.
   const token = newSessionToken();
   const sessionId = sessionIdFor(token);
-  const lifetimeSeconds = await sessionLifetimeSeconds(userId);
+  // Never longer than the workspace allows, and shorter when the person did not
+  // ask to be remembered: the server ends it too, not just the browser.
+  const workspaceSeconds = await sessionLifetimeSeconds(userId);
+  const lifetimeSeconds = remember ? workspaceSeconds : Math.min(workspaceSeconds, SHORT_SESSION_SECONDS);
   const expiresAt = new Date(Date.now() + lifetimeSeconds * 1000);
 
   const agent = request?.headers.get("user-agent") ?? "";
@@ -94,8 +101,9 @@ export async function signInAs(
   userId: string,
   request: Request,
   replacing?: string,
+  remember = true,
 ): Promise<{ sessionId: string; expiresAt: Date }> {
-  const { token, sessionId, expiresAt, lifetimeSeconds } = await createSession(userId, request);
+  const { token, sessionId, expiresAt, lifetimeSeconds } = await createSession(userId, request, remember);
   if (replacing) await destroySession(replacing);
   const store = await cookies();
   store.set(env.sessionCookie, token, {
@@ -103,7 +111,8 @@ export async function signInAs(
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: lifetimeSeconds,
+    // No maxAge = a session cookie: the browser drops it when it is closed.
+    ...(remember ? { maxAge: lifetimeSeconds } : {}),
   });
   return { sessionId, expiresAt };
 }

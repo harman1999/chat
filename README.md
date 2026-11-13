@@ -190,6 +190,7 @@ status line means, the log files, and a troubleshooting table.
 | `npm run db:seed` | Load the demo workspace (idempotent) |
 | `npm run db:reset` | Destroy the volume and rebuild from scratch |
 | `npm run create-user -- --email … --name … --password …` | Add a person from the shell |
+| `npm run reset-two-factor -- --email …` | Turn off someone's two-factor sign-in (lost phone) |
 
 Run `tsc`, `lint` and `build` before calling anything done. They catch
 different things: the missing-field errors `tsc` finds are not caught by the dev server, and
@@ -351,6 +352,8 @@ it; migration `0003` made it structural.
 A full audit was done on 2026-11-13 — see `docs/security-audit.md` for what was
 found and fixed. What protects the app, and what a deployment must do:
 
+- **Two-factor sign-in.** Optional per person, and can be required for the workspace (see Two-factor sign-in). A password alone does not create a session once it is on.
+- **Keep me signed in.** The sign-in form has a checkbox, on by default. Ticked, the sign-in lasts the workspace's session length (Administration → Authentication). Unticked, the cookie is dropped when the browser closes and the server ends the session after 12 hours at most — also when two-factor sits in between.
 - **Sessions.** The browser holds a random 256-bit token (`HttpOnly`,
   `SameSite=Lax`, `Secure` in production). Only its SHA-256 is stored, keyed on
   and listed, so a copy of Postgres, Redis or the "active sessions" screen holds
@@ -515,6 +518,37 @@ To try it locally without a real provider: `docker compose --profile sso up -d
 mock-oidc`, then use issuer `http://localhost:8099/helix`, any client ID and
 secret, and sign in with whatever username and email claims you type into its
 form. Stop it with `docker compose --profile sso stop mock-oidc`.
+
+### Two-factor sign-in
+
+Anyone can turn on a second step in **Settings → Profile → Sign-in → Two-factor
+authentication**: after the password, a 6-digit code from an authenticator app
+(Google Authenticator, 1Password, Authy, Microsoft Authenticator …). Turning it on
+asks for the password, shows a QR code (or a key to type in), and only switches on
+once a code from the new entry has been entered. Ten one-time **recovery codes**
+are shown once — each signs in once if the phone is lost, and "New recovery
+codes" replaces the set.
+
+- **Requiring it.** **Administration → Authentication → Two-factor authentication**
+  makes it mandatory. People without it are walked through setting it up at their
+  next sign-in, before they get a session. You must have it on yourself first, so
+  you cannot lock yourself out. It cannot be turned off by someone in a workspace
+  that requires it. Sessions already open are not interrupted. It does not apply to
+  single sign-on, where the identity provider decides, nor to bots and tokens.
+- **A lost phone.** An administrator opens **Users → ⋯ → Reset two-factor**; the
+  person is signed out and can start again. Like a password reset, it works only
+  on people below you in rank. For the **owner**, who has no one above them:
+  `npm run reset-two-factor -- --email owner@example.com`.
+- **How it is checked.** Standard TOTP (RFC 6238; SHA-1, 6 digits, 30 s, one step
+  of clock drift either way). A code works **once** — it cannot be replayed in its
+  window. A correct password alone gives no session: the browser holds a
+  short-lived challenge (5 minutes, 5 wrong codes, single use), and attempts are
+  also limited per account (10 per 15 minutes) and per address. The secret is
+  stored encrypted; recovery codes only as hashes. Changing or turning off the
+  setting asks for the password *and* a current code.
+- **Everything is audited**: turning on and off, recovery-code use (as a warning),
+  regeneration, and administrator resets (critical).
+- **Not included.** Hardware keys / passkeys (WebAuthn) and SMS codes.
 
 ### Inviting people
 

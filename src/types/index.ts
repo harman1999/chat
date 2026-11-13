@@ -354,6 +354,8 @@ export interface AdminUser extends User {
   lastSignInAt: string | null;
   createdAt: string;
   messageCount: number;
+  /** Whether they have set up two-factor sign-in. */
+  twoFactorEnabled: boolean;
 }
 
 export interface Permission {
@@ -463,6 +465,8 @@ export interface SystemSettings {
   fileRetentionDays: number | null;
   maxUploadMb: number;
   sessionTimeoutHours: number;
+  /** Everyone must sign in with a code from an authenticator app. */
+  twoFactorRequired: boolean;
 }
 
 /* -------------------------------------------------------------------------- */

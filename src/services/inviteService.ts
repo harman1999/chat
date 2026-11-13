@@ -32,6 +32,6 @@ export const inviteService = {
   },
 
   accept(token: string, input: { fullName: string; email: string; password: string }) {
-    return request<{ ok: true }>(`/join/${encodeURIComponent(token)}`, { method: "POST", body: input });
+    return request<{ ok: true; signInRequired?: boolean }>(`/join/${encodeURIComponent(token)}`, { method: "POST", body: input });
   },
 };

@@ -8,7 +8,9 @@ before starting one.
 - [ ] Single sign-on: SAML
 - [ ] Directory sign-in: LDAP / Active Directory
 - [ ] Automatic provisioning and removal of people (SCIM)
-- [ ] Real two-factor login (the fake 2FA was removed; nothing replaced it)
+- [x] Two-factor login with authenticator-app codes and recovery codes; can be required per workspace — done 2026-11-14
+- [ ] Two-factor: hardware keys / passkeys (WebAuthn)
+- [ ] Two-factor: email the person when a recovery code is used or two-factor is turned off
 - [x] Security audit and hardening — done 2026-11-13 (`docs/security-audit.md`)
 - [ ] Remove `'unsafe-inline'` from `script-src` (needs per-request CSP nonces)
 - [ ] Notify people of repeated failed sign-ins / lock an account after many failures

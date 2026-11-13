@@ -4,6 +4,7 @@ import type { RateLimitRule } from "@server/lib/rate-limit";
 import { acceptInviteSchema } from "@server/lib/schemas";
 import { signInAs } from "@server/lib/session";
 import { invitesRepo, type InviteProblem } from "@server/repo/invites";
+import { twoFactorRepo } from "@server/repo/twoFactor";
 
 /**
  * Public by necessity: the person opening an invite has no account yet. The
@@ -48,7 +49,11 @@ export const POST = handler(
 
     // Signed straight in: joining and then being asked to sign in again with
     // the password just chosen is a step with no purpose.
-    await signInAs(result.userId, request);
+    // Unless the workspace requires two-factor: a brand-new account has none, and a
+    // session here would let them in without it. They sign in next, which walks
+    // them through setting it up.
+    const signInRequired = await twoFactorRepo.isRequiredForUser(result.userId);
+    if (!signInRequired) await signInAs(result.userId, request);
 
     await audit({
       actorId: result.userId,
@@ -59,7 +64,7 @@ export const POST = handler(
       request,
     });
 
-    return json({ ok: true }, { status: 201 });
+    return json({ ok: true, signInRequired }, { status: 201 });
   },
   { rateLimit: JOIN_RULE },
 );

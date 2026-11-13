@@ -41,7 +41,13 @@ export function JoinWorkspace({ token }: { token: string }) {
     setIsJoining(true);
     setError(null);
     try {
-      await inviteService.accept(token, { fullName: fullName.trim(), email: email.trim(), password });
+      const result = await inviteService.accept(token, { fullName: fullName.trim(), email: email.trim(), password });
+      if (result.signInRequired) {
+        // The workspace requires two-factor, so there is no session yet: signing
+        // in is what walks them through setting it up.
+        router.push("/login");
+        return;
+      }
       // The server has signed them in, so straight to the workspace.
       router.push("/workspace");
       router.refresh();

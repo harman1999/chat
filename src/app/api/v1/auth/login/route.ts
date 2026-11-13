@@ -4,7 +4,9 @@ import { signInAs } from "@server/lib/session";
 import { query } from "@server/db/client";
 import { hashPassword, passwordNeedsRehash, verifyPassword } from "@server/lib/password";
 import { loginSchema } from "@server/lib/schemas";
+import { createChallenge } from "@server/lib/two-factor-challenge";
 import { ssoRepo } from "@server/repo/sso";
+import { twoFactorRepo } from "@server/repo/twoFactor";
 import { mapUser, usersRepo } from "@server/repo/users";
 
 let decoy: Promise<string> | undefined;
@@ -100,7 +102,32 @@ export const POST = handler(async (request: Request) => {
   if (passwordNeedsRehash(row.password_hash as string)) {
     await query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [row.id, await hashPassword(body.password)]);
   }
-  const { expiresAt } = await signInAs(row.id, request);
+  // The password alone is not enough here. No session is issued yet: the browser
+  // gets a short-lived challenge to answer with a code (or, where the workspace
+  // requires two-factor and this person has not set it up, to set it up first).
+  if (await twoFactorRepo.isEnabled(row.id)) {
+    return json(
+      {
+        code: "two_factor_required",
+        message: "Enter the code from your authenticator app.",
+        status: 403,
+        challenge: await createChallenge(row.id, "verify", body.remember),
+      },
+      { status: 403 },
+    );
+  }
+  if (await twoFactorRepo.isRequired(row.workspace_id)) {
+    return json(
+      {
+        code: "two_factor_setup_required",
+        message: "Your workspace requires two-factor sign-in. Set it up to continue.",
+        status: 403,
+        challenge: await createChallenge(row.id, "enrol", body.remember),
+      },
+      { status: 403 },
+    );
+  }
+  const { expiresAt } = await signInAs(row.id, request, undefined, body.remember);
   return json({
     user: mapUser(row),
     expiresAt: expiresAt.toISOString(),

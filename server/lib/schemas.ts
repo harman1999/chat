@@ -16,7 +16,17 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(512),
   /** Which workspace's account, by slug — needed only when the email has several. */
   workspace: z.string().trim().min(1).max(60).optional(),
+  /** "Keep me signed in". Off: the session ends when the browser closes, or after 12 hours. */
+  remember: z.boolean().default(true),
 });
+
+/* Two-factor. `code` is deliberately loose (6 digits or a recovery code), checked in the repo. */
+const secondFactorCode = z.string().trim().min(1).max(32);
+export const twoFactorChallengeSchema = z.object({ challenge: z.string().min(1).max(100) });
+export const twoFactorVerifySchema = twoFactorChallengeSchema.extend({ code: secondFactorCode });
+export const twoFactorPasswordSchema = z.object({ password: z.string().min(1).max(512) });
+export const twoFactorCodeSchema = z.object({ code: secondFactorCode });
+export const twoFactorConfirmSchema = z.object({ password: z.string().min(1).max(512), code: secondFactorCode });
 
 export const messageBodySchema = z.object({
   body: z.string().max(12_000).optional().default(""),
@@ -178,6 +188,7 @@ export const systemSettingsSchema = z
     fileRetentionDays: z.number().int().min(0).max(36_500).nullable(),
     maxUploadMb: z.number().int().min(1).max(5_000),
     sessionTimeoutHours: z.number().int().min(1).max(8_760),
+    twoFactorRequired: z.boolean(),
   })
   .partial();
 

@@ -14,6 +14,7 @@ import { APP } from "@/lib/constants";
 import { initialsOf } from "@/lib/format";
 import { reloadAs } from "@/lib/navigation";
 import { isApiError, USE_MOCK_TRANSPORT } from "@/services/http";
+import { TwoFactorStep, type SecondStep } from "./two-factor-step";
 
 /** What the single sign-on callback sends back as `?sso_error=`, in words. */
 const SSO_ERRORS: Record<string, string> = {
@@ -40,6 +41,7 @@ export function LoginForm({
 }) {
   const [email, setEmail] = useState("harman.singh@northwind.io");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(ssoError ? (SSO_ERRORS[ssoError] ?? SSO_ERRORS.failed) : null);
   const { data: sso } = useQuery({
     queryKey: ["sso-options", workspace?.slug ?? null],
@@ -56,17 +58,26 @@ export function LoginForm({
   // Filled when the email has accounts in several workspaces and the password
   // matched more than one: the person picks which to enter.
   const [choices, setChoices] = useState<WorkspaceChoice[] | null>(null);
+  // Set once the password is right but a code is still needed.
+  const [second, setSecond] = useState<SecondStep | null>(null);
 
   const signIn = async (slug?: string) => {
     setError(null);
     setIsSubmitting(true);
     try {
-      await authService.signIn({ email, password, workspace: slug });
+      await authService.signIn({ email, password, workspace: slug, remember });
       reloadAs(next);
     } catch (caught) {
       setIsSubmitting(false);
       if (isApiError(caught) && caught.code === "choose_workspace") {
         setChoices((caught.details?.workspaces as WorkspaceChoice[] | undefined) ?? []);
+        return;
+      }
+      if (isApiError(caught) && (caught.code === "two_factor_required" || caught.code === "two_factor_setup_required")) {
+        setSecond({
+          challenge: String(caught.details?.challenge ?? ""),
+          mode: caught.code === "two_factor_required" ? "verify" : "enrol",
+        });
         return;
       }
       // The server's own words for a deactivated account or too many
@@ -81,6 +92,20 @@ export function LoginForm({
     event.preventDefault();
     void signIn(workspace?.slug);
   };
+
+  if (second) {
+    return (
+      <TwoFactorStep
+        step={second}
+        next={next}
+        onBack={() => {
+          setSecond(null);
+          setChoices(null);
+          setPassword("");
+        }}
+      />
+    );
+  }
 
   if (choices) {
     return (
@@ -214,6 +239,16 @@ export function LoginForm({
               className="h-9"
             />
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-fg">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+              className="size-4 accent-[var(--accent)]"
+            />
+            Keep me signed in
+          </label>
 
           {error && (
             <p

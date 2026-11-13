@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { SegmentedControl, SettingRow, SettingSection } from "@/components/settings";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { adminService } from "@/services";
 import { isApiError } from "@/services/http";
 import { AdminPage } from "./admin-page";
@@ -41,6 +42,29 @@ export function AuthenticationAdmin() {
     ? [...SESSION_CHOICES]
     : [...SESSION_CHOICES, { value: current, label: `${current} hours` }].sort((a, b) => a.value - b.value);
 
+  const usersQuery = useQuery({ queryKey: ["admin-users"], queryFn: () => adminService.listUsers() });
+  const people = (usersQuery.data ?? []).filter((user) => user.status === "active" && !user.isBot);
+  const withTwoFactor = people.filter((user) => user.twoFactorEnabled).length;
+
+  const setTwoFactorRequired = async (required: boolean) => {
+    setIsSaving(true);
+    try {
+      await adminService.updateSettings({ twoFactorRequired: required });
+      await queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      toast.success(required ? "Two-factor is now required" : "Two-factor is no longer required", {
+        description: required
+          ? "People without it are asked to set it up the next time they sign in. Sessions already open are not interrupted."
+          : "People who set it up keep using it unless they turn it off.",
+      });
+    } catch (error) {
+      toast.error("Could not change the two-factor requirement", {
+        description: isApiError(error) ? error.message : undefined,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const change = async (hours: number) => {
     setIsSaving(true);
     try {
@@ -69,6 +93,34 @@ export function AuthenticationAdmin() {
         </SettingSection>
 
         <SsoSettings />
+
+        <SettingSection
+          title="Two-factor authentication"
+          description="A code from an authenticator app, as well as the password. Anyone can turn it on in Settings → Profile; here you can require it."
+        >
+          <SettingRow
+            label="Require two-factor for everyone"
+            description={`People without it are asked to set it up before they can sign in. Does not apply to single sign-on, where your identity provider decides. ${
+              usersQuery.isPending ? "" : `${withTwoFactor} of ${people.length} active people have it on now.`
+            }`}
+            control={
+              isPending ? (
+                <Skeleton className="h-5 w-8 rounded-full" />
+              ) : (
+                <Switch
+                  aria-label="Require two-factor for everyone"
+                  checked={data?.twoFactorRequired ?? false}
+                  disabled={isSaving}
+                  onCheckedChange={(checked) => void setTwoFactorRequired(checked)}
+                />
+              )
+            }
+          />
+          <SettingRow
+            label="Someone lost their phone"
+            description="Open Users, find them, and choose Reset two-factor. They are signed out and can start again. If it is the owner, see the README."
+          />
+        </SettingSection>
 
         <SettingSection title="Passwords" description="Rules every password has to meet.">
           <SettingRow

@@ -130,6 +130,25 @@ export const LOGIN_IP_RULE: RateLimitRule = {
   name: "login:ip",
 };
 
+/**
+ * Second-factor codes are six digits, so guessing has to be made impractical
+ * rather than merely slow. Per account (across every challenge, because someone
+ * holding the password can always ask for a fresh one) and, looser, per address.
+ */
+export const TWO_FACTOR_ACCOUNT_RULE: RateLimitRule = {
+  limit: 10,
+  windowSeconds: 900,
+  scope: "identity",
+  name: "mfa:account",
+};
+
+export const TWO_FACTOR_IP_RULE: RateLimitRule = {
+  limit: 60,
+  windowSeconds: 300,
+  scope: "ip",
+  name: "mfa:ip",
+};
+
 /** Password change re-hashes on every attempt, so it is cheap to abuse. */
 export const PASSWORD_RULE: RateLimitRule = {
   limit: 5,

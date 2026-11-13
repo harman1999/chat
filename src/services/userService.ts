@@ -17,6 +17,13 @@ export interface UpdateProfileInput {
   timezone: string;
 }
 
+export interface TwoFactorStatus {
+  enabled: boolean;
+  recoveryCodesLeft: number;
+  /** The workspace makes everyone use it, so it cannot be turned off. */
+  required: boolean;
+}
+
 export const userService = {
   async list(): Promise<User[]> {
     if (USE_MOCK_TRANSPORT) return mockResolve(users);
@@ -65,6 +72,36 @@ export const userService = {
     return request<void>("/users/me/password", {
       method: "PUT",
       body: { currentPassword: current, newPassword: next },
+    });
+  },
+
+  async twoFactorStatus(): Promise<TwoFactorStatus> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ enabled: false, recoveryCodesLeft: 0, required: false }, 120);
+    return request<TwoFactorStatus>("/users/me/two-factor");
+  },
+
+  /** Step one of turning it on: the password, then a secret and QR code to scan. */
+  async startTwoFactor(password: string): Promise<{ secret: string; otpauthUrl: string; qr: string }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ secret: "MOCKMOCKMOCKMOCK", otpauthUrl: "otpauth://totp/mock", qr: "" }, 300);
+    return request("/users/me/two-factor/setup", { method: "POST", body: { password } });
+  },
+
+  /** Step two: a code from the new entry. Resolves to the recovery codes, shown once. */
+  async enableTwoFactor(code: string): Promise<{ recoveryCodes: string[] }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ recoveryCodes: [] }, 300);
+    return request<{ recoveryCodes: string[] }>("/users/me/two-factor/enable", { method: "POST", body: { code } });
+  },
+
+  async disableTwoFactor(password: string, code: string): Promise<void> {
+    if (USE_MOCK_TRANSPORT) return mockResolve(undefined, 300);
+    return request<void>("/users/me/two-factor/disable", { method: "POST", body: { password, code } });
+  },
+
+  async regenerateRecoveryCodes(password: string, code: string): Promise<{ recoveryCodes: string[] }> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ recoveryCodes: [] }, 300);
+    return request<{ recoveryCodes: string[] }>("/users/me/two-factor/recovery-codes", {
+      method: "POST",
+      body: { password, code },
     });
   },
 

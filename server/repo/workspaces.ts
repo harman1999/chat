@@ -41,6 +41,7 @@ export function defaultSettings(slug: string, generalChannelId: string | null): 
     fileRetentionDays: null,
     maxUploadMb: 50,
     sessionTimeoutHours: 720,
+    twoFactorRequired: false,
   };
 }
 

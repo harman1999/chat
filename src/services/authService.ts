@@ -7,6 +7,8 @@ export interface Credentials {
   password: string;
   /** Workspace slug, when the email has accounts in more than one. */
   workspace?: string;
+  /** Stay signed in after the browser closes (default). */
+  remember?: boolean;
 }
 
 /** What sign-in answers when the email has accounts in several workspaces. */
@@ -27,6 +29,20 @@ export interface Session {
   expiresAt: string;
 }
 
+/** The secret and QR code to add to an authenticator app. */
+export interface TwoFactorSetup {
+  secret: string;
+  otpauthUrl: string;
+  /** A ready-to-show image (data URL). */
+  qr: string;
+}
+
+export interface TwoFactorSignIn extends Session {
+  /** Only when a recovery code was used. */
+  usedRecoveryCode?: boolean;
+  recoveryCodesLeft?: number;
+}
+
 export const authService = {
   async signIn(credentials: Credentials): Promise<Session> {
     if (USE_MOCK_TRANSPORT) {
@@ -36,6 +52,31 @@ export const authService = {
       });
     }
     return request<Session>("/auth/login", { method: "POST", body: credentials });
+  },
+
+  /** Second step of signing in: the challenge from `signIn`, and a code from the app or a recovery code. */
+  async verifyTwoFactor(challenge: string, code: string): Promise<TwoFactorSignIn> {
+    if (USE_MOCK_TRANSPORT) {
+      return mockResolve({ user: currentUser, expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
+    }
+    return request<TwoFactorSignIn>("/auth/two-factor/verify", { method: "POST", body: { challenge, code } });
+  },
+
+  /** For a workspace that requires two-factor: a new secret to add before getting in. */
+  async startTwoFactorEnrolment(challenge: string): Promise<TwoFactorSetup> {
+    if (USE_MOCK_TRANSPORT) return mockResolve({ secret: "MOCKMOCKMOCKMOCK", otpauthUrl: "otpauth://totp/mock", qr: "" });
+    return request<TwoFactorSetup>("/auth/two-factor/setup", { method: "POST", body: { challenge } });
+  },
+
+  /** Proves the new entry works, signs in, and returns the recovery codes (shown once). */
+  async finishTwoFactorEnrolment(challenge: string, code: string): Promise<Session & { recoveryCodes: string[] }> {
+    if (USE_MOCK_TRANSPORT) {
+      return mockResolve({ user: currentUser, expiresAt: new Date(Date.now() + 86_400_000).toISOString(), recoveryCodes: [] });
+    }
+    return request<Session & { recoveryCodes: string[] }>("/auth/two-factor/enrol", {
+      method: "POST",
+      body: { challenge, code },
+    });
   },
 
   async signOut(): Promise<void> {
